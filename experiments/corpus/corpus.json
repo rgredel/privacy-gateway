@@ -1,0 +1,97 @@
+[
+  {
+    "doc_id": 0,
+    "text": "Właścicielem firmy jest Anna Nowak-Zielińska o numerze NIP 5210001234.",
+    "pii": [
+      "Anna Nowak-Zielińska",
+      "5210001234"
+    ],
+    "category": "simple"
+  },
+  {
+    "doc_id": 1,
+    "text": "Wiadomość dotyczy Anny Nowak-Zielińskiej w sprawie zaległych składek.",
+    "pii": [
+      "Anny Nowak-Zielińskiej"
+    ],
+    "category": "simple"
+  },
+  {
+    "doc_id": 2,
+    "text": "Osobą kontaktową w biurze jest Katarzyna Dąbrowska.",
+    "pii": [
+      "Katarzyna Dąbrowska"
+    ],
+    "category": "simple"
+  },
+  {
+    "doc_id": 3,
+    "text": "Proszę o wysłanie faktury dla Katarzyny Dąbrowskiej na adres w Kraków.",
+    "pii": [
+      "Katarzyny Dąbrowskiej",
+      "Kraków"
+    ],
+    "category": "medium"
+  },
+  {
+    "doc_id": 4,
+    "text": "Kontakt w sprawie płatności: Jan Kowalski, NIP 6340127890.",
+    "pii": [
+      "Jan Kowalski",
+      "6340127890"
+    ],
+    "category": "medium"
+  },
+  {
+    "doc_id": 5,
+    "text": "Informuję, że pan Jan Kowalski z firmy Usługi Transportowe Kowalski zmienił numer konta na PL27114020040000300201355387. Proszę zaktualizować kartotekę Jana Kowalskiego w systemie RAG.",
+    "pii": [
+      "Jan Kowalski",
+      "Usługi Transportowe Kowalski",
+      "PL27114020040000300201355387",
+      "Jana Kowalskiego"
+    ],
+    "category": "complex"
+  },
+  {
+    "doc_id": 6,
+    "text": "Zgodnie z umową, Tomasz Wiśniewski (firma Kancelaria Podatkowa Wiśniewski i Wspólnicy, NIP 1132567890) wystawi fakturę dla Anny Nowak-Zielińskiej na kwotę brutto 15420.50.",
+    "pii": [
+      "Tomasz Wiśniewski",
+      "Kancelaria Podatkowa Wiśniewski i Wspólnicy",
+      "1132567890",
+      "Anny Nowak-Zielińskiej"
+    ],
+    "category": "complex"
+  },
+  {
+    "doc_id": 7,
+    "text": "Wybitny astronom Mikołaj Kopernik urodził się w Toruniu i wstrzymał słońce.",
+    "pii": [],
+    "category": "false_positive_bait"
+  },
+  {
+    "doc_id": 8,
+    "text": "Oficjalny adres Sejmu to ul. Wiejska 4, 00-902 Warszawa. Proszę tam nic nie wysyłać.",
+    "pii": [],
+    "category": "false_positive_bait"
+  },
+  {
+    "doc_id": 9,
+    "text": "Wzór numeru NIP dla konta testowego to 000-000-00-00 lub 1234567890.",
+    "pii": [],
+    "category": "false_positive_bait"
+  },
+  {
+    "doc_id": 10,
+    "text": "Maria Skłodowska-Curie odkryła rad i polon, pracując w Paryżu.",
+    "pii": [],
+    "category": "false_positive_bait"
+  },
+  {
+    "doc_id": 11,
+    "text": "Proszę o przygotowanie raportu sprzedaży za zeszły miesiąc.",
+    "pii": [],
+    "category": "clean"
+  }
+]

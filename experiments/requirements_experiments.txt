@@ -1,0 +1,16 @@
+# Dodatkowe zależności dla eksperymentów (Rozdział 5)
+# Instalacja: pip install -r experiments/requirements_experiments.txt
+
+# Eksperyment 1 – Presidio NER baseline
+presidio-analyzer
+spacy
+
+# Eksperyment 2 – BERTScore / Utility Score
+bert-score
+sentence-transformers
+
+# Po instalacji pakietów, pobierz model spaCy dla języka polskiego:
+#   python -m spacy download pl_core_news_lg
+#
+# BERTScore automatycznie pobierze model allegro/herbert-base-cased (~500 MB)
+# przy pierwszym uruchomieniu.

@@ -1,0 +1,50 @@
+<root>
+    <naglowek>
+        <numer_faktury>FS/123/2026</numer_faktury>
+        <data_wystawienia>2026-02-04</data_wystawienia>
+        <miejsce_wystawienia>Warszawa</miejsce_wystawienia>
+    </naglowek>
+    <kontrahent>
+        <nazwa>Przedsiębiorstwo Handlowo-Usługowe "Januszex" Marek Kwiatkowski</nazwa>
+        <nip>5210001234</nip>
+        <regon>123456789</regon>
+        <adres>
+            <ulica>ul. Marszałkowska 10/12</ulica>
+            <kod_pocztowy>00-001</kod_pocztowy>
+            <miasto>Warszawa</miasto>
+        </adres>
+        <osoba_kontaktowa>Anna Nowak-Zielińska</osoba_kontaktowa>
+    </kontrahent>
+    <platnosc>
+        <metoda>Przelew</metoda>
+        <termin>2026-02-18</termin>
+        <rachunek_bankowy>PL61102010260000123456789012</rachunek_bankowy>
+        <kwota_brutto>15420.50</kwota_brutto>
+        <waluta>PLN</waluta>
+    </platnosc>
+</root>
+<root>
+    <naglowek>
+        <numer_faktury>FS/1234/2026</numer_faktury>
+        <data_wystawienia>2026-04-04</data_wystawienia>
+        <miejsce_wystawienia>Warszawa</miejsce_wystawienia>
+    </naglowek>
+    <kontrahent>
+        <nazwa>Przedsiębiorstwo Handlowo-Usługowe "Januszex" Marek Kwiatkowski</nazwa>
+        <nip>5210001234</nip>
+        <regon>123456789</regon>
+        <adres>
+            <ulica>ul. Marszałkowska 10/12</ulica>
+            <kod_pocztowy>00-001</kod_pocztowy>
+            <miasto>Warszawa</miasto>
+        </adres>
+        <osoba_kontaktowa>Anna Nowak-Zielińska</osoba_kontaktowa>
+    </kontrahent>
+    <platnosc>
+        <metoda>Przelew</metoda>
+        <termin>2026-04-18</termin>
+        <rachunek_bankowy>PL61102010260000123456789012</rachunek_bankowy>
+        <kwota_brutto>15420.50</kwota_brutto>
+        <waluta>PLN</waluta>
+    </platnosc>
+</root>

@@ -1,0 +1,7 @@
+{
+  "graphs": {
+    "privacy_gateway": "./privacy_gateway.py:graph"
+  },
+  "env": ".env",
+  "dependencies": ["."]
+}

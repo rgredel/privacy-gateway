@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+
+# Virtual environment
+.venv/
+
+# Environment variables
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# LangGraph API cache
+.langgraph_api/
+
+# Chainlit
+.chainlit/
+.files/
+
+# PyInstaller
+*.spec
+*.exe
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Experiment results (regenerable)
+experiments/results/
+
+# Scratch / debug scripts
+scratch/
