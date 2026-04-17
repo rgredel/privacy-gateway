@@ -11,14 +11,24 @@ def masking_agent(state: GraphState) -> GraphState:
     print("\n" + "-"*30)
     print("[DEBUG: MASKING] Rozpoczęto maskowanie danych...")
     
-    for idx, pii in enumerate(state.get("detected_pii", [])):
-        token = f"[PII_{idx}]"
-        vault[token] = pii
-        
-        # Ochrona kontekstu
-        masked_context = masked_context.replace(pii, token)
-        # Ochrona pytania zadanego przez użytkownika
-        masked_query = masked_query.replace(pii, token)
+    # Używamy ustrukturyzowanych encji z etykietami (z labeling_agent), jeśli są dostępne
+    entities = state.get("pii_entities", [])
+    
+    if entities:
+        for idx, entity in enumerate(entities):
+            val = entity["value"]
+            lbl = entity["label"]
+            token = f"[{lbl.upper()}_{idx}]"
+            vault[token] = val
+            masked_context = masked_context.replace(val, token)
+            masked_query = masked_query.replace(val, token)
+    else:
+        # Fallback do prostego maskowania, jeśli brak ustrukturyzowanych danych
+        for idx, pii in enumerate(state.get("detected_pii", [])):
+            token = f"[PII_{idx}]"
+            vault[token] = pii
+            masked_context = masked_context.replace(pii, token)
+            masked_query = masked_query.replace(pii, token)
 
     print(f"[DEBUG: MASKING] Skarbiec (Vault): {vault}")
     print(f"[DEBUG: MASKING] Zanonimizowane zapytanie: {masked_query}")

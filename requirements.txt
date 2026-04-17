@@ -1,0 +1,18 @@
+# Core dependencies
+langchain-core
+langgraph
+langchain-ollama
+langchain-google-genai
+chainlit
+pydantic
+python-dotenv
+
+# PII Detection (Presidio + spaCy)
+presidio-analyzer
+spacy
+
+# Evaluation & Experiments
+bert-score
+sentence-transformers
+pandas
+matplotlib

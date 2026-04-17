@@ -12,21 +12,35 @@ def cloud_llm(state: GraphState) -> GraphState:
 
     llm = get_cloud_llm()
     
-    prompt = PromptTemplate.from_template(
-        "Jesteś uprzejmym i wysoce wykwalifikowanym asystentem biznesowo-finansowym. "
-        "Twoim zadaniem jest odpowiadanie na polecenia i pytania w sposób inteligentny, konwersacyjny i naturalny.\n\n"
-        "Podczas formułowania odpowiedzi powinieneś przeanalizować podany poniżej kontekst. "
-        "Pamiętaj, że otrzymane od systemu dane RAG (kontekst) będą w dużej mierze pochodzić ze zrzutów z "
-        "systemu Comarch ERP Optima (księgowość, kadry, faktury, baza kontrahentów itp.).\n"
-        "Zależy mi, abyś łączył te firmowe dane i dopowiadał je ze swoją szeroką wiedzą nabytą z internetu o prawie i księgowości. "
-        "Nie opieraj się w 100% wyłącznie na kontekście - użyj go jako inspiracji lub weryfikacji, "
-        "ale śmiało dopełniaj luki swoimi faktami, informacjami i wyciągaj obszerne wnioski analityczne.\n\n"
-        "WAŻNE (ZASADY MASKOWANIA PII):\n"
-        "Zarówno dostarczony kontekst, jak i pytanie użytkownika, zostały zanonimizowane - "
-        "dane wrażliwe ukryto pod identyfikatorami w nawiasach kwadratowych, np. [PII_0], [PII_1].\n"
-        "To absolutnie kluczowe: Budując ostateczną odpowiedź, dla każdego chronionego podmiotu MUSISZ użyć tych samych indeksów w wygenerowanym zdaniu (np. 'Zgodnie z fakturą dla [PII_0]...'). Zostaną one potem automatycznie odszyfrowane przez mój system z powrotem. Nigdy pod żadnym pozorem nie zmyślaj prawdziwych nazw z internetu w miejsce ukrytych klamr.\n\n"
-        "KONTEKST Z ERP OPTIMA:\n{context}\n\n"
-        "PYTANIE UŻYTKOWNIKA:\n{query}"
+def hybrid_detection_agent(state: GraphState) -> GraphState:
+    raw_text = state["raw_xml"] + "\n" + state["user_query"]
+    presidio_candidates = get_pii_candidates(raw_text)
+    
+    # DYNAMICZNA INSTRUKCJA (Zwalczanie "leniwego LLM")
+    discovery_mode = ""
+    if not presidio_candidates:
+        discovery_mode = (
+            "UWAGA: Skaner Presidio nie znalazł nic. BĄDŹ EKSTREMALNIE CZUJNY. "
+            "To Ty jesteś teraz jedyną linią obrony. Przeszukaj tekst bardzo dokładnie."
+        )
+    else:
+        discovery_mode = f"Skaner Presidio wstępnie znalazł: {', '.join(presidio_candidates)}. Zweryfikuj to."
+
+    # PROMPT ZASADY "DON'T FIX, JUST COPY"
+    prompt_template = (
+        "### ROLA: RYGORYSTYCZNY SKANER PII\n"
+        "Twoim jedynym zadaniem jest wyodrębnienie danych PII osób prywatnych.\n\n"
+        f"{discovery_mode}\n\n"
+        "### ŻELAZNE ZASADY (STRICT CONSTRAINTS):\n"
+        "1. ZASADA 1:1 (VERBATIM): Kopiuj dane DOKŁADNIE tak, jak występują w tekście. "
+        "Nigdy nie poprawiaj literówek, nie zmieniaj nazwisk (np. Kowalski na Nowak) i nie formatuj danych.\n"
+        "2. BEZ ETYKIET: Zwracaj same wartości. Zakaz używania prefiksów typu 'NIP:', 'ul.', 'PESEL:'.\n"
+        "3. FILTR JDG: Ignoruj nazwy firm (np. 'Usługi Transportowe Kowalski'). Wypisz tylko imię i nazwisko osoby prywatnej.\n"
+        "4. KONTEKST PRYWATNY: Ignoruj postacie historyczne i adresy urzędów (np. Wiejska 4).\n\n"
+        "### PRZYKŁADY DO NAŚLADOWANIA:\n"
+        "- Tekst: 'Faktura dla Jan Kowalsky' -> Wyjście: ['Jan Kowalsky'] (nie zmieniaj na Kowalski!)\n"
+        "- Tekst: 'NIP: 634012' -> Wyjście: ['634012'] (bez słowa NIP)\n\n"
+        "TEKST DO ANALIZY:\n{text}"
     )
     
     chain = prompt | llm

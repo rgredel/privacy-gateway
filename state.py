@@ -3,7 +3,8 @@ from typing import TypedDict, Dict
 class GraphState(TypedDict):
     raw_xml: str                         # Wejściowy plik XML jako czysty tekst (dla kontektu RAG)
     user_query: str                      # Pytanie zadane przez użytkownika
-    detected_pii: list[str]              # Zidentyfikowane informacje PII
+    detected_pii: list[str]              # Zidentyfikowane informacje PII (surowe napisy)
+    pii_entities: list[dict]             # Ustrukturyzowane PII: [{"value": "...", "label": "..."}]
     masked_context: str                  # Tekst kontekstu po pseudonimizacji
     masked_query: str                    # Pytanie użytkownika po pseudonimizacji
     vault: Dict[str, str]                # Skarbiec kluczy: Token -> Oryginał

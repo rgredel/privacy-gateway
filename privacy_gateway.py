@@ -4,6 +4,7 @@ from state import GraphState
 from agents import (
     retrieval_agent,
     detection_agent,
+    labeling_agent,
     masking_agent,
     guardrail_agent,
     check_guardrail,
@@ -17,20 +18,21 @@ from agents import (
 # ==========================================
 
 def privacy_wrapper_agent(state: GraphState) -> GraphState:
-    """Wraper łączący wczesniejszy proces logiki prywatności w jeden wątek operacyjny dla LangGraph"""
+    """Wraper łączący proces logiki prywatności (Detekcja -> Etykietowanie -> Maskowanie)"""
+    # 1. Detekcja (wykrywa surowe napisy PII)
     detect_res = detection_agent(state)
-    
-    # Przekazujemy stan detekcji do wewnętrznego modelu
-    internal_state = {**state, **detect_res}
-
-    # FAIL-SAFE: Jeśli detekcja rzuciła błąd (error_status), nie wykonujemy maskowania
     if detect_res.get("error_status"):
         return detect_res
 
-    mask_res = masking_agent(internal_state)
+    # 2. Etykietowanie (nadaje typy wykrytym napisom)
+    internal_state_1 = {**state, **detect_res}
+    label_res = labeling_agent(internal_state_1)
+
+    # 3. Maskowanie (używa napisów i etykiet do pseudonimizacji)
+    internal_state_2 = {**internal_state_1, **label_res}
+    mask_res = masking_agent(internal_state_2)
     
-    # LangGraph Reducer na głównej ścieżce otrzyma scalone, wyselekcjonowane aktualizacje PII oraz masek
-    return {**detect_res, **mask_res}
+    return {**detect_res, **label_res, **mask_res}
 
 
 def sync_node(state: GraphState) -> GraphState:

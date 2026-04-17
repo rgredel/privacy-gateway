@@ -9,26 +9,32 @@ class PIIData(BaseModel):
 
 def detection_agent(state: GraphState) -> GraphState:
     """
-    Wykorzystuje lokalny model Bielik poprzez Ollama do detekcji PII.
+    Agent detekcji PII oparty wyłącznie na LLM (Bielik).
     """
-    text_to_analyze = state["raw_xml"] + "\n\nPYTANIE UZYTKOWNIKA:\n" + state["user_query"]
+    text_to_analyze = state["raw_xml"] + "\n" + state["user_query"]
     
     print("\n" + "="*50)
     print("[DEBUG: DETECTION] Rozpoczęto analizę PII przez model Bielik...")
-    # print(f"[DEBUG: DETECTION] Tekst wejściowy:\n{text_to_analyze}") # Opcjonalnie wyłączone dla czytelności
-        
+    
     try:
         llm = get_local_llm()
         structured_llm = llm.with_structured_output(PIIData)
         
         prompt = PromptTemplate.from_template(
-            "Jesteś ekspertem ds. ochrony danych osobowych (DPO). Twoim zadaniem jest precyzyjna identyfikacja danych PII.\n\n"
-            "Zadanie: Wyodrębnij tylko INDYWIDUALNE dane osobowe (PII) z poniższego tekstu.\n\n"
-            "Zasady:\n"
-            "1. Zwracaj tylko konkretne wartości. Pomiń etykiety (np. 'PESEL:', 'Kontakt:').\n"
-            "2. Odrzucaj dane instytucji publicznych i postaci historycznych.\n"
-            "3. Podejście konserwatywne: Jeśli nie masz pewności, pomiń fragment.\n\n"
-            "Format wyjściowy: Zwróć dane jako listę fragmentów tekstu, np. ['Wartość 1', 'Wartość 2'].\n\n"
+            "Zadanie: Jesteś ekspertem RODO. Znajdź w tekście dane PII TYLKO prywatnych osób fizycznych.\n\n"
+            "### ZASADY SELEKCJI:\n"
+            "1. TYLKO WARTOŚCI: Wypisz sam numer lub nazwisko (np. '5210001234', a nie 'NIP: 5210001234').\n"
+            "2. OSOBY PRYWATNE: Ignoruj postacie historyczne (np. Kopernik), firmy (np. Orlen) i urzędy.\n"
+            "3. ADRESY: Ignoruj adresy publiczne (np. Wiejska 4, Wawel) i nazwy miast jako osobne encje.\n"
+            "4. STOP META-DATA: Słowa takie jak 'PESEL', 'NIP', 'Email', 'Telefon' to ETYKIETY - NIGDY ich nie wypisuj.\n\n"
+            "### PRZYKŁADY NEGATYWNE (Tego NIE wypisuj):\n"
+            "- 'Mikołaj Kopernik' -> (ignoruj, postać historyczna)\n"
+            "- 'Urząd Skarbowy' -> (ignoruj, instytucja)\n"
+            "- 'NIP', 'PESEL' -> (ignoruj, to nazwa kategorii)\n"
+            "- 'System RAG' -> (ignoruj, termin techniczny)\n\n"
+            "### PRZYKŁADY POZYTYWNE (To wypisz):\n"
+            "- 'Jan Nowak' -> Jan Nowak\n"
+            "- 'ul. Kwiatowa 2/4, 00-123 Warszawa' -> ul. Kwiatowa 2/4, 00-123 Warszawa\n\n"
             "TEKST DO ANALIZY:\n{text}"
         )
         
@@ -38,7 +44,6 @@ def detection_agent(state: GraphState) -> GraphState:
         error_msg = ""
     except Exception as e:
         error_msg = f"Detection failed: {e}"
-        print(f"[Blad] Modul Detekcji zawiodl: {e}")
         detected = []
         
     unique_pii = list(set([p.strip() for p in detected if p.strip()]))
@@ -53,51 +58,59 @@ def detection_agent(state: GraphState) -> GraphState:
 
 def hybrid_detection_agent(state: GraphState) -> GraphState:
     """
-    Logika scalająca (Merging Strategy):
-    1. Presidio znajduje wzorce (numery), którym ufamy.
-    2. LLM szuka wyłącznie nazwisk i adresów osób prywatnych.
-    3. Wyniki są łączone.
+    Logika Sekwencyjna (Sequential Verification & Discovery):
+    1. Presidio znajduje kandydatów (wzorce numeryczne, adresy e-mail).
+    2. Kandydaci są przekazywani do Bielika jako kontekst.
+    3. Bielik weryfikuje kandydatów i szuka brakujących danych (np. nazwisk).
     """
     raw_text = state["raw_xml"] + "\n" + state["user_query"]
     
     print("\n" + "="*50)
-    print("[DEBUG: HYBRID] Rozpoczęto analizę hybrydową (Strategia Merging)...")
+    print("[DEBUG: HYBRID] Krok 1: Wstępna detekcja przez Presidio...")
     
-    # 1. Kandydaci z Presidio (numeryczne)
-    presidio_pii = get_pii_candidates(raw_text)
-    print(f"[DEBUG: HYBRID] Presidio znalazło: {presidio_pii}")
+    # 1. Pozyskanie kandydatów z Presidio
+    presidio_candidates = get_pii_candidates(raw_text)
+    print(f"[DEBUG: HYBRID] Kandydaci z Presidio: {presidio_candidates}")
     
-    # 2. LLM szuka tylko nazwisk i adresów
+    # 2. Przekazanie do Bielika w celu weryfikacji i rozszerzenia
     try:
         llm = get_local_llm()
         structured_llm = llm.with_structured_output(PIIData)
         
         prompt = PromptTemplate.from_template(
-            "Jesteś ekspertem ds. cyberbezpieczeństwa i prywatności danych. Twoim celem jest uzupełnienie detekcji PII o brakujące nazwiska i adresy.\n\n"
-            "Zadanie: W poniższym tekście znajdź tylko IMIONA, NAZWISKA i ADRESY osób prywatnych.\n\n"
-            "ZASADY:\n"
-            "1. Ignoruj numery (NIP, PESEL, IBAN) - są już przetworzone.\n"
-            "2. Odrzucaj postacie historyczne i nazwy instytucji publicznych.\n"
-            "3. Zwracaj tylko konkretne wartości bez etykiet.\n\n"
-            "Format wyjściowy: Lista fragmentów tekstu, np. ['Wartość A', 'Wartość B'].\n\n"
-            "TEKST DO ANALIZY:\n{text}"
+            "Jesteś ekspertem ochrony danych (DPO). Twoim zadaniem jest stworzenie OSTATECZNEJ listy danych PII.\n\n"
+            "SYSTEM PRESIDIO WYKRYŁ NASTĘPUJĄCYCH KANDYDATÓW:\n"
+            "{candidates}\n\n"
+            "TEKST DO ANALIZY:\n"
+            "{text}\n\n"
+            "TWOJE ZADANIA:\n"
+            "1. WERYFIKACJA: Sprawdź, czy kandydaci z Presidio faktycznie są danymi PII w tym kontekście. "
+            "Jeśli coś jest nazwą firmy, postacią historyczną lub adresem urzędu – ODRZUĆ TO.\n"
+            "2. ODKRYWANIE: Znajdź w tekście dane PII, których Presidio nie wykryło (szczególnie nazwiska, adresy prywatne).\n"
+            "3. CZYSZCZENIE: Zwróć same wartości (np. '5210001234'), bez etykiet typu 'NIP:'.\n\n"
+            "ZASADY NEGATYWNE (Czego NIE wypisywać):\n"
+            "- Nazw firm, urzędów, instytucji.\n"
+            "- Postaci historycznych i powszechnie znanych miejsc.\n"
+            "- Słów kluczowych: 'NIP', 'PESEL', 'E-mail', 'IBAN', 'REGON'.\n"
         )
         
         chain = prompt | structured_llm
-        result = chain.invoke({"text": raw_text})
-        llm_detected = result.detected_strings if result else []
+        result = chain.invoke({
+            "candidates": ", ".join(presidio_candidates) if presidio_candidates else "Brak",
+            "text": raw_text
+        })
+        
+        final_pii = result.detected_strings if result else []
+        
     except Exception as e:
-        print(f"[Blad] LLM zawiódł w hybrydzie: {e}")
-        llm_detected = []
+        print(f"[Blad] Bielik zawiódł w fazie weryfikacji: {e}")
+        # W razie błędu LLM, zwracamy chociaż wyniki z Presidio jako fallback
+        final_pii = presidio_candidates
 
-    # 3. Łączenie wyników
-    final_pii = list(set(presidio_pii + llm_detected))
-    unique_pii = list(set([p.strip() for p in final_pii if p.strip()]))
-    
-    print(f"[DEBUG: HYBRID] Ostateczne PII (Merge): {unique_pii}")
+    print(f"[DEBUG: HYBRID] Ostateczne PII po weryfikacji Bielika: {final_pii}")
     print("="*50)
     
     return {
-        "detected_pii": unique_pii,
+        "detected_pii": list(set([p.strip() for p in final_pii if p.strip()])),
         "error_status": ""
     }

@@ -5,6 +5,7 @@ from .guardrail import guardrail_agent, check_guardrail
 from .cloud import cloud_llm
 from .block import block_request
 from .re_identification import re_identification_agent
+from .labeling import labeling_agent
 
 __all__ = [
     "retrieval_agent",
@@ -15,4 +16,5 @@ __all__ = [
     "cloud_llm",
     "block_request",
     "re_identification_agent",
+    "labeling_agent",
 ]
