@@ -12,7 +12,7 @@ def masking_agent(state: GraphState) -> GraphState:
     print("[DEBUG: MASKING] Rozpoczęto maskowanie danych...")
     
     # Używamy ustrukturyzowanych encji z etykietami (z labeling_agent), jeśli są dostępne
-    entities = state.get("pii_entities", [])
+    entities = state.get("labeled_pii_entities", [])
     
     if entities:
         for idx, entity in enumerate(entities):
@@ -24,7 +24,7 @@ def masking_agent(state: GraphState) -> GraphState:
             masked_query = masked_query.replace(val, token)
     else:
         # Fallback do prostego maskowania, jeśli brak ustrukturyzowanych danych
-        for idx, pii in enumerate(state.get("detected_pii", [])):
+        for idx, pii in enumerate(state.get("raw_pii_strings", [])):
             token = f"[PII_{idx}]"
             vault[token] = pii
             masked_context = masked_context.replace(pii, token)

@@ -52,7 +52,7 @@ def detection_agent(state: GraphState) -> GraphState:
     print("="*50)
     
     return {
-        "detected_pii": unique_pii,
+        "raw_pii_strings": unique_pii,
         "error_status": error_msg
     }
 
@@ -111,6 +111,6 @@ def hybrid_detection_agent(state: GraphState) -> GraphState:
     print("="*50)
     
     return {
-        "detected_pii": list(set([p.strip() for p in final_pii if p.strip()])),
+        "raw_pii_strings": list(set([p.strip() for p in final_pii if p.strip()])),
         "error_status": ""
     }

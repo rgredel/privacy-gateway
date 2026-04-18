@@ -16,12 +16,12 @@ def labeling_agent(state: GraphState) -> GraphState:
     """
     Nowy węzeł: Klasyfikuje wykryte wcześniej napisy PII, nadając im typy.
     """
-    detected_pii = state.get("detected_pii", [])
-    if not detected_pii:
-        return {"pii_entities": []}
+    raw_pii_strings = state.get("raw_pii_strings", [])
+    if not raw_pii_strings:
+        return {"labeled_pii_entities": []}
 
     print("\n" + "="*50)
-    print(f"[DEBUG: LABELING] Klasyfikacja {len(detected_pii)} encji PII...")
+    print(f"[DEBUG: LABELING] Klasyfikacja {len(raw_pii_strings)} encji PII...")
 
     try:
         llm = get_local_llm()
@@ -51,7 +51,7 @@ def labeling_agent(state: GraphState) -> GraphState:
         chain = prompt | structured_llm
         result = chain.invoke({
             "context": full_context,
-            "pii_list": ", ".join(detected_pii)
+            "pii_list": ", ".join(raw_pii_strings)
         })
         
         print(f"[DEBUG: LABELING] Raw result: {result}")
@@ -61,7 +61,7 @@ def labeling_agent(state: GraphState) -> GraphState:
         labeled_map = {e.value.strip().lower(): e.label.upper() for e in result.entities}
         llm_values = list(labeled_map.keys())
         
-        for pii in detected_pii:
+        for pii in raw_pii_strings:
             clean_pii = pii.strip().lower()
             
             # 1. Dokładne dopasowanie
@@ -82,9 +82,9 @@ def labeling_agent(state: GraphState) -> GraphState:
     except Exception as e:
         print(f"[DEBUG: LABELING] Błąd klasyfikacji: {e}")
         # Fallback: wszystkie jako DANA
-        entities = [{"value": p, "label": "DANA"} for p in detected_pii]
+        entities = [{"value": p, "label": "DANA"} for p in raw_pii_strings]
 
     print(f"[DEBUG: LABELING] Wynik: {entities}")
     print("="*50)
 
-    return {"pii_entities": entities}
+    return {"labeled_pii_entities": entities}

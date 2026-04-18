@@ -1,6 +1,7 @@
 from .retrieval import retrieval_agent
 from .detection import detection_agent
 from .masking import masking_agent
+from .masking_presidio import masking_presidio_agent
 from .guardrail import guardrail_agent, check_guardrail
 from .cloud import cloud_llm
 from .block import block_request
@@ -11,6 +12,7 @@ __all__ = [
     "retrieval_agent",
     "detection_agent",
     "masking_agent",
+    "masking_presidio_agent",
     "guardrail_agent",
     "check_guardrail",
     "cloud_llm",

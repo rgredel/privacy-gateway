@@ -34,31 +34,38 @@ def compute_bertscore(originals: list[str], masked_texts: list[str]):
     )
     return [{"f1": f.item()} for f in F1]
 
-def run_masking_scenario(text: str, pii_list: list[str], use_labeling: bool):
-    """Wykonuje maskowanie w jednym z dwóch trybów."""
+def run_masking_scenario(text: str, pii_list: list[str], mode: str):
+    """Wykonuje maskowanie w jednym z trzech trybów."""
     from agents.masking import masking_agent
+    from agents.masking_presidio import masking_presidio_agent
     from agents.labeling import labeling_agent
     
     state = {
         "raw_xml": text,
         "user_query": "",
-        "detected_pii": pii_list,
-        "pii_entities": [],
+        "raw_pii_strings": pii_list,
+        "labeled_pii_entities": [],
         "masked_context": "",
         "masked_query": "",
         "vault": {}
     }
     
-    if use_labeling:
+    if mode == "semantic":
         label_res = labeling_agent(state)
         state.update(label_res)
-    
-    mask_res = masking_agent(state)
+        mask_res = masking_agent(state)
+    elif mode == "native":
+        label_res = labeling_agent(state)
+        state.update(label_res)
+        mask_res = masking_presidio_agent(state)
+    else: # generic
+        mask_res = masking_agent(state)
+        
     return mask_res["masked_context"]
 
 def main():
     print("=" * 70)
-    print("EKSPERYMENT 2 – Porównanie użyteczności: Generyczne vs Semantyczne")
+    print("EKSPERYMENT 2 – Porównanie użyteczności: Generyczne vs Semantyczne vs Native")
     print("=" * 70)
 
     with open(CORPUS_PATH, encoding="utf-8") as f:
@@ -70,6 +77,7 @@ def main():
     originals = []
     masked_generic = []
     masked_semantic = []
+    masked_native = []
 
     for i, doc in enumerate(docs_with_pii):
         print(f"[E2] Przetwarzanie dokumentu {i+1}/{len(docs_with_pii)} (ID: {doc['doc_id']})...")
@@ -78,43 +86,50 @@ def main():
         
         # Scenariusz A: Generyczny
         print(f"  - Generowanie maskowania generycznego...")
-        masked_generic.append(run_masking_scenario(text, doc["pii"], use_labeling=False))
+        masked_generic.append(run_masking_scenario(text, doc["pii"], mode="generic"))
         
         # Scenariusz B: Semantyczny
         print(f"  - Generowanie maskowania semantycznego (LLM Labeling)...")
-        masked_semantic.append(run_masking_scenario(text, doc["pii"], use_labeling=True))
+        masked_semantic.append(run_masking_scenario(text, doc["pii"], mode="semantic"))
+        
+        # Scenariusz C: Native (AnonymizerEngine)
+        print(f"  - Generowanie maskowania natywnego (Presidio Transformation)...")
+        masked_native.append(run_masking_scenario(text, doc["pii"], mode="native"))
 
-    print("[E2] Obliczanie BERTScore dla obu scenariuszy...")
+    print("[E2] Obliczanie BERTScore dla wszystkich scenariuszy...")
     res_generic = compute_bertscore(originals, masked_generic)
     res_semantic = compute_bertscore(originals, masked_semantic)
+    res_native = compute_bertscore(originals, masked_native)
 
     rows = []
     for i, doc in enumerate(docs_with_pii):
         f1_gen = res_generic[i]["f1"]
         f1_sem = res_semantic[i]["f1"]
+        f1_nat = res_native[i]["f1"]
         
         rows.append({
             "doc_id": doc["doc_id"],
             "category": doc["category"],
             "f1_generic": round(f1_gen, 4),
             "f1_semantic": round(f1_sem, 4),
-            "improvement": round((f1_sem - f1_gen) * 100, 2),
-            "degradation_semantic_pct": round((1.0 - f1_sem) * 100, 2)
+            "f1_native": round(f1_nat, 4),
+            "improvement_sem": round((f1_sem - f1_gen) * 100, 2),
+            "improvement_nat": round((f1_nat - f1_gen) * 100, 2)
         })
 
     # Podsumowanie
     avg_gen = sum(r["f1_generic"] for r in rows) / len(rows)
     avg_sem = sum(r["f1_semantic"] for r in rows) / len(rows)
-    avg_impr = sum(r["improvement"] for r in rows) / len(rows)
-    avg_degr_sem = sum(r["degradation_semantic_pct"] for r in rows) / len(rows)
+    avg_nat = sum(r["f1_native"] for r in rows) / len(rows)
 
     print("\n" + "=" * 70)
     print("WYNIKI PORÓWNAWCZE")
     print("=" * 70)
     print(f"  Średni BERTScore (Generyczny): {avg_gen:.4f}")
     print(f"  Średni BERTScore (Semantyczny): {avg_sem:.4f}")
-    print(f"  Średnia poprawa dzięki typom:  {avg_impr:+.2f}%")
-    print(f"  Degradacja semantyczna:        {avg_degr_sem:.2f}%  {'✅ PASS' if avg_degr_sem < 15 else '❌ FAIL'}")
+    print(f"  Średni BERTScore (Native):     {avg_nat:.4f}")
+    print(f"  Poprawa (Semantyczny vs Gen): {avg_sem - avg_gen:+.4f}")
+    print(f"  Poprawa (Native vs Gen):      {avg_nat - avg_gen:+.4f}")
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     with open(RESULTS_CSV, "w", encoding="utf-8", newline="") as f:

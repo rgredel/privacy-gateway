@@ -5,7 +5,7 @@ from agents import (
     retrieval_agent,
     detection_agent,
     labeling_agent,
-    masking_agent,
+    masking_presidio_agent,
     guardrail_agent,
     check_guardrail,
     cloud_llm,
@@ -28,9 +28,9 @@ def privacy_wrapper_agent(state: GraphState) -> GraphState:
     internal_state_1 = {**state, **detect_res}
     label_res = labeling_agent(internal_state_1)
 
-    # 3. Maskowanie (używa napisów i etykiet do pseudonimizacji)
+    # 3. Maskowanie (Używamy teraz bezpieczniejszego silnika Presidio)
     internal_state_2 = {**internal_state_1, **label_res}
-    mask_res = masking_agent(internal_state_2)
+    mask_res = masking_presidio_agent(internal_state_2)
     
     return {**detect_res, **label_res, **mask_res}
 
@@ -114,13 +114,15 @@ if __name__ == "__main__":
         initial_state = GraphState(
             raw_xml=xml_input,
             user_query=user_query,
-            detected_pii=[],
+            raw_pii_strings=[],
+            labeled_pii_entities=[],
             masked_context="",
             masked_query="",
             vault={},
             is_safe=False,
             cloud_response="",
-            final_output=""
+            final_output="",
+            error_status=""
         )
         
         # Uruchomienie przepływu LangGraph
