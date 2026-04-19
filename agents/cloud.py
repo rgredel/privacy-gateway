@@ -1,67 +1,123 @@
 import os
+import re
+from typing import List, Dict
+from pydantic import BaseModel, Field
+from guardrails import Guard, Validator, register_validator
+from guardrails.validator_base import FailResult, PassResult, ValidationResult
+from agents.presidio_engine import setup_presidio_analyzer
 from langchain_core.prompts import PromptTemplate
 from state import GraphState
 from llm_factory import get_cloud_llm
 
+# Inicjalizacja silnika Presidio (singleton z konfiguracją PL)
+_analyzer = setup_presidio_analyzer()
+
+# 1. Niestandardowy walidator PII (Anti-Leakage)
+@register_validator(name="anti_leakage", data_type="string")
+class AntiLeakageValidator(Validator):
+    def __init__(self, on_fail="reask"):
+        super().__init__(on_fail=on_fail)
+
+    def validate(self, value: str, metadata: Dict) -> ValidationResult:
+        vault = metadata.get("vault", {})
+        analyzer = metadata.get("analyzer")
+        
+        if not analyzer:
+            return PassResult()
+            
+        # A. Skanowanie pod kątem surowych danych PII (Presidio)
+        # Ignorujemy tagi w formacie [TAG_ID], zastępując je spacjami tej samej długości (zachowanie offsetów)
+        text_for_scan = re.sub(r'\[[A-Z_]+_\d+\]', lambda m: ' ' * len(m.group(0)), value)
+        results = analyzer.analyze(text=text_for_scan, language='pl')
+        
+        # Filtrujemy wyniki, aby uniknąć błędnych wskazań
+        leaks = [value[res.start:res.end] for res in results if res.score > 0.4]
+        
+        if leaks:
+            return FailResult(
+                error_message=f"Wykryto wyciek surowych danych PII: {leaks}. Model musi używać wyłącznie tagów."
+            )
+            
+        # B. Weryfikacja poprawności tagów [ETYKIETA_ID]
+        tags_in_answer = re.findall(r'\[[A-Z_]+_\d+\]', value)
+        invalid_tags = [t for t in tags_in_answer if t not in vault]
+        
+        if invalid_tags:
+            return FailResult(
+                error_message=f"Model użył nieistniejących lub zmienionych tagów: {invalid_tags}."
+            )
+            
+        return PassResult()
+
+# 2. Schemat wyjściowy dla Guardrails
+class CloudResponse(BaseModel):
+    answer: str = Field(
+        description="Tekst odpowiedzi od modelu AI",
+        validators=[AntiLeakageValidator(on_fail="reask")]
+    )
+
+# Inicjalizacja Guardrails
+guard = Guard.for_pydantic(output_class=CloudResponse)
+
 def cloud_llm(state: GraphState) -> GraphState:
     """
-    Wywołanie Google Gemini z zabezpieczonymi danymi.
+    Wysyła zanonimizowane dane do chmury z walidacją Guardrails AI.
     """
     if "GOOGLE_API_KEY" not in os.environ:
-        return {**state, "cloud_response": "BŁĄD: Brak klucza GOOGLE_API_KEY w zmiennych środowiskowych."}
+        return {**state, "error_status": "BŁĄD: Brak klucza GOOGLE_API_KEY."}
 
     llm = get_cloud_llm()
     
-def hybrid_detection_agent(state: GraphState) -> GraphState:
-    raw_text = state["raw_xml"] + "\n" + state["user_query"]
-    presidio_candidates = get_pii_candidates(raw_text)
+    prompt_template = PromptTemplate.from_template(
+        "Jesteś pomocnym asystentem księgowym. Odpowiadasz na pytania na podstawie danych z systemu ERP.\n"
+        "DANE ZOSTAŁY ZANONIMIZOWANE. Zamiast nazwisk i kwot zobaczysz tagi typu [OSOBA_KOBIETA_0] lub [NIP_1].\n\n"
+        "### ZASADY:\n"
+        "1. ZASADA VERBATIM: Nigdy nie zmieniaj struktury tagów. Kopiuj je 1:1.\n"
+        "2. ANTI-LEAKAGE: Jeśli domyślasz się jakie to dane, NIGDY nie używaj prawdziwych imion. Używaj wyłącznie tagów.\n"
+        "3. KONTEKST:\n{context}\n\n"
+        "### PYTANIE UŻYTKOWNIKA:\n{query}\n\n"
+        "Odpowiedz rzeczowo, zachowując tagi w miejscach danych wrażliwych."
+    )
     
-    # DYNAMICZNA INSTRUKCJA (Zwalczanie "leniwego LLM")
-    discovery_mode = ""
-    if not presidio_candidates:
-        discovery_mode = (
-            "UWAGA: Skaner Presidio nie znalazł nic. BĄDŹ EKSTREMALNIE CZUJNY. "
-            "To Ty jesteś teraz jedyną linią obrony. Przeszukaj tekst bardzo dokładnie."
-        )
-    else:
-        discovery_mode = f"Skaner Presidio wstępnie znalazł: {', '.join(presidio_candidates)}. Zweryfikuj to."
+    context = state["masked_context"]
+    query = state["masked_query"]
+    vault = state["vault"]
+    
+    def llm_callable(messages: List[Dict], **kwargs) -> str:
+        prompt_str = "\n".join([m["content"] for m in messages])
+        res = llm.invoke(prompt_str)
+        return res.content
 
-    # PROMPT ZASADY "DON'T FIX, JUST COPY"
-    prompt_template = (
-        "### ROLA: RYGORYSTYCZNY SKANER PII\n"
-        "Twoim jedynym zadaniem jest wyodrębnienie danych PII osób prywatnych.\n\n"
-        f"{discovery_mode}\n\n"
-        "### ŻELAZNE ZASADY (STRICT CONSTRAINTS):\n"
-        "1. ZASADA 1:1 (VERBATIM): Kopiuj dane DOKŁADNIE tak, jak występują w tekście. "
-        "Nigdy nie poprawiaj literówek, nie zmieniaj nazwisk (np. Kowalski na Nowak) i nie formatuj danych.\n"
-        "2. BEZ ETYKIET: Zwracaj same wartości. Zakaz używania prefiksów typu 'NIP:', 'ul.', 'PESEL:'.\n"
-        "3. FILTR JDG: Ignoruj nazwy firm (np. 'Usługi Transportowe Kowalski'). Wypisz tylko imię i nazwisko osoby prywatnej.\n"
-        "4. KONTEKST PRYWATNY: Ignoruj postacie historyczne i adresy urzędów (np. Wiejska 4).\n\n"
-        "### PRZYKŁADY DO NAŚLADOWANIA:\n"
-        "- Tekst: 'Faktura dla Jan Kowalsky' -> Wyjście: ['Jan Kowalsky'] (nie zmieniaj na Kowalski!)\n"
-        "- Tekst: 'NIP: 634012' -> Wyjście: ['634012'] (bez słowa NIP)\n\n"
-        "TEKST DO ANALIZY:\n{text}"
-    )
+    print("\n" + "-"*30)
+    print("[DEBUG: CLOUD] Wywołanie Gemini z Guardrails AI (Anti-Leakage)...")
     
-    chain = prompt | llm
+    try:
+        # Uruchomienie Guardrails
+        outcome = guard(
+            llm_callable,
+            messages=[{"role": "user", "content": prompt_template.format(context=context, query=query)}],
+            metadata={"vault": vault, "analyzer": _analyzer},
+            num_reasks=1
+        )
+        
+        validated_res = outcome.validated_output
+        
+        if validated_res and "answer" in validated_res:
+            answer = validated_res["answer"]
+            error = ""
+        else:
+            answer = "BŁĄD: Odpowiedź modelu narusza zasady bezpieczeństwa PII."
+            error = f"Guardrails Validation Error: {outcome.validation_summaries}"
+            
+    except Exception as e:
+        print(f"[DEBUG: CLOUD] Wyjątek w Guardrails: {e}")
+        answer = "BŁĄD TECHNICZNY: Proces walidacji nie powiódł się."
+        error = f"Guardrails Exception: {str(e)}"
+
+    print(f"[DEBUG: CLOUD] Odpowiedź (zweryfikowana): {answer}")
+    print("-"*30)
     
-    # Logowanie zanonimizowanego promptu
-    formatted_prompt = prompt.format(
-        context=state["masked_context"],
-        query=state["masked_query"]
-    )
-    print("\n" + "☁️"*20)
-    print("[DEBUG: CLOUD] Wysyłanie zanonimizowanego zapytania do Gemini...")
-    # print(f"[DEBUG: CLOUD] Pełny Prompt:\n{formatted_prompt}") # Opcjonalnie (może być bardzo długie)
-    print(f"[DEBUG: CLOUD] Zanonimizowane pytanie: {state['masked_query']}")
-    
-    # Wywołanie z zanonimizowanym kontekstem i zapytaniem
-    result = chain.invoke({
-        "context": state["masked_context"],
-        "query": state["masked_query"]
-    })
-    
-    print(f"[DEBUG: CLOUD] Surowa odpowiedź (z tokenami): {result.content}")
-    print("☁️"*20)
-    
-    return {"cloud_response": result.content}
+    return {
+        "cloud_response": answer,
+        "error_status": error
+    }

@@ -7,10 +7,31 @@ logging.getLogger("presidio-analyzer").setLevel(logging.ERROR)
 def setup_presidio_analyzer():
     """Konfiguruje Presidio z modelem PL + dodatkowymi rozpoznawaczami polskich identyfikatorów."""
     try:
-        from presidio_analyzer import AnalyzerEngine, PatternRecognizer, Pattern
+        from presidio_analyzer import AnalyzerEngine, PatternRecognizer, Pattern, EntityRecognizer, RecognizerResult
+        from presidio_analyzer.recognizer_registry import RecognizerRegistry
         from presidio_analyzer.nlp_engine import NlpEngineProvider
     except ImportError:
         return None
+
+    class PolishSpacyRecognizer(EntityRecognizer):
+        def __init__(self, nlp_engine):
+            super().__init__(
+                supported_entities=["PERSON", "LOCATION", "ORGANIZATION"],
+                supported_language="pl"
+            )
+            self.nlp = nlp_engine.nlp["pl"]
+
+        def analyze(self, text, entities, nlp_artifacts=None):
+            results = []
+            doc = self.nlp(text)
+            for ent in doc.ents:
+                if ent.label_ == "persName" and "PERSON" in entities:
+                    results.append(RecognizerResult(entity_type="PERSON", start=ent.start_char, end=ent.end_char, score=0.85))
+                elif ent.label_ == "placeName" and "LOCATION" in entities:
+                    results.append(RecognizerResult(entity_type="LOCATION", start=ent.start_char, end=ent.end_char, score=0.85))
+                elif ent.label_ == "orgName" and "ORGANIZATION" in entities:
+                    results.append(RecognizerResult(entity_type="ORGANIZATION", start=ent.start_char, end=ent.end_char, score=0.85))
+            return results
 
     configuration = {
         "nlp_engine_name": "spacy",
@@ -43,8 +64,17 @@ def setup_presidio_analyzer():
             supported_language="pl",
         )
 
+        registry = RecognizerRegistry()
+        registry.supported_languages = ["pl"]
+        registry.load_predefined_recognizers(nlp_engine=nlp_engine, languages=["pl"])
+        
+        # Usuwamy domyślny SpacyRecognizer i dodajemy nasz poprawiony dla PL
+        registry.remove_recognizer("SpacyRecognizer")
+        registry.add_recognizer(PolishSpacyRecognizer(nlp_engine))
+        
         analyzer = AnalyzerEngine(
             nlp_engine=nlp_engine,
+            registry=registry,
             supported_languages=["pl"],
         )
         analyzer.registry.add_recognizer(nip_rec)
