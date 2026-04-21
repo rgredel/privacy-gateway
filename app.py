@@ -29,7 +29,7 @@ async def on_message(message: cl.Message):
     initial_state = GraphState(
         raw_xml=xml_input,
         user_query=message.content,
-        detected_pii=[],
+        raw_pii_strings=[],
         masked_context="",
         masked_query="",
         vault={},

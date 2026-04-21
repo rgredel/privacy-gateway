@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 from langchain_core.prompts import PromptTemplate
 from state import GraphState
-from llm_factory import get_local_llm
+from llm_manager import get_llm
 
 class PIIEntity(BaseModel):
     value: str = Field(description="Wartość danej PII")
@@ -24,7 +24,7 @@ def labeling_agent(state: GraphState) -> GraphState:
     print(f"[DEBUG: LABELING] Klasyfikacja {len(raw_pii_strings)} encji PII...")
 
     try:
-        llm = get_local_llm()
+        llm = get_llm("labeling")
         structured_llm = llm.with_structured_output(LabelingData)
         
         prompt = PromptTemplate.from_template(

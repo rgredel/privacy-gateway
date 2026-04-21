@@ -87,16 +87,44 @@ def run_presidio(analyzer, text: str) -> list[str]:
 def run_gateway_detection(text: str) -> list[str]:
     """Wywołuje detection_agent (LLM-only)."""
     from agents.detection import detection_agent
-    state = {"raw_xml": text, "user_query": "", "detected_pii": [], "masked_context": "", "masked_query": "", "vault": {}, "is_safe": False, "cloud_response": "", "final_output": ""}
+    state = {
+        "raw_xml": text,
+        "user_query": "",
+        "raw_pii_strings": [],
+        "labeled_pii_entities": [],
+        "masked_context": "",
+        "masked_query": "",
+        "vault": {},
+        "is_safe": False,
+        "cloud_response": "",
+        "final_output": "",
+        "error_status": ""
+    }
     result = detection_agent(state)
-    return result.get("detected_pii", [])
+    detected = result.get("raw_pii_strings", [])
+    print(f"    [Gateway] Wykryte: {detected}")
+    return detected
 
 def run_hybrid_detection(text: str) -> list[str]:
     """Wywołuje hybrid_detection_agent (Presidio -> LLM)."""
     from agents.detection import hybrid_detection_agent
-    state = {"raw_xml": text, "user_query": "", "detected_pii": [], "masked_context": "", "masked_query": "", "vault": {}, "is_safe": False, "cloud_response": "", "final_output": ""}
+    state = {
+        "raw_xml": text,
+        "user_query": "",
+        "raw_pii_strings": [],
+        "labeled_pii_entities": [],
+        "masked_context": "",
+        "masked_query": "",
+        "vault": {},
+        "is_safe": False,
+        "cloud_response": "",
+        "final_output": "",
+        "error_status": ""
+    }
     result = hybrid_detection_agent(state)
-    return result.get("detected_pii", [])
+    detected = result.get("raw_pii_strings", [])
+    print(f"    [Hybrid] Wykryte: {detected}")
+    return detected
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -146,6 +174,7 @@ def main():
         gt = doc["pii"]
 
         print(f"  Dokument {doc_id} [{doc['category']}] – {len(gt)} PII w ground truth")
+        print(f"    [GT] Expected: {gt}")
 
         # 1. Gateway (Bielik only)
         try:
@@ -160,6 +189,7 @@ def main():
         if presidio_available:
             try:
                 pr_detected = run_presidio(analyzer, text)
+                print(f"    [Presidio] Wykryte: {pr_detected}")
             except Exception as e:
                 print(f"    [BŁĄD Presidio] {e}")
                 pr_detected = []

@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 from langchain_core.prompts import PromptTemplate
 from state import GraphState
-from llm_factory import get_local_llm
+from llm_manager import get_llm
 
 class GuardrailResult(BaseModel):
     is_safe: bool = Field(description="Czy zapytanie jest bezpieczne (True) czy jest to próba ataku (False)?")
@@ -13,7 +13,7 @@ def guardrail_agent(state: GraphState) -> GraphState:
     Użycie Pydantic wymusza na małym modelu (1.5b) tryb klasyfikacji zamiast konwersacji.
     """
     try:
-        llm = get_local_llm()
+        llm = get_llm("guardrail")
         structured_llm = llm.with_structured_output(GuardrailResult)
         
         prompt = PromptTemplate.from_template(

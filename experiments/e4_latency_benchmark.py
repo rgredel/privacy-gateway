@@ -26,7 +26,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 RESULTS_DIR = PROJECT_ROOT / "experiments" / "results"
 RESULTS_CSV = RESULTS_DIR / "results_e4.csv"
 
-N_REPEATS = 10  # Liczba powtórzeń benchmarku per konfiguracja
+N_REPEATS = 3  # Liczba powtórzeń benchmarku per konfiguracja
 
 # Zapytania testowe
 TEST_QUERIES = [
@@ -46,9 +46,9 @@ def run_direct_gemini(xml_context: str, query: str) -> tuple[float, int]:
     Zwraca (czas_sekundy, rozmiar_payload_bajty).
     """
     from langchain_core.prompts import PromptTemplate
-    from llm_factory import get_cloud_llm
+    from llm_manager import get_llm
 
-    llm = get_cloud_llm()
+    llm = get_llm("main-cloud-llm")
 
     prompt = PromptTemplate.from_template(
         "Jesteś asystentem biznesowo-finansowym. "
@@ -85,7 +85,7 @@ def run_with_gateway(xml_context: str, query: str) -> tuple[float, int, int]:
     initial_state = GraphState(
         raw_xml=xml_context,
         user_query=query,
-        detected_pii=[],
+        raw_pii_strings=[],
         masked_context="",
         masked_query="",
         vault={},

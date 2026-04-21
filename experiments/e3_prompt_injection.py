@@ -234,7 +234,7 @@ def run_guardrail(query: str) -> bool:
     state = {
         "raw_xml": "",
         "user_query": query,
-        "detected_pii": [],
+        "raw_pii_strings": [],
         "masked_context": "",
         "masked_query": "",
         "vault": {},

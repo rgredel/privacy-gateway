@@ -1,116 +1,83 @@
 from pydantic import BaseModel, Field
-from langchain_core.prompts import PromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_google_genai import ChatGoogleGenerativeAI
 from state import GraphState
-from llm_factory import get_local_llm
+from llm_manager import get_llm
 from agents.presidio_engine import get_pii_candidates
 
+# Model danych dla ustrukturyzowanego wyjścia
 class PIIData(BaseModel):
-    detected_strings: list[str] = Field(description="Lista fragmentów tekstu będących danymi PII.")
+    detected_strings: list[str] = Field(description="Lista ciągów znaków (strings) uznanych za PII lub do usunięcia.")
 
 def detection_agent(state: GraphState) -> GraphState:
     """
-    Agent detekcji PII oparty wyłącznie na LLM (Bielik).
-    """
-    text_to_analyze = state["raw_xml"] + "\n" + state["user_query"]
-    
-    print("\n" + "="*50)
-    print("[DEBUG: DETECTION] Rozpoczęto analizę PII przez model Bielik...")
-    
-    try:
-        llm = get_local_llm()
-        structured_llm = llm.with_structured_output(PIIData)
-        
-        prompt = PromptTemplate.from_template(
-            "Zadanie: Jesteś ekspertem RODO. Znajdź w tekście dane PII TYLKO prywatnych osób fizycznych.\n\n"
-            "### ZASADY SELEKCJI:\n"
-            "1. TYLKO WARTOŚCI: Wypisz sam numer lub nazwisko (np. '5210001234', a nie 'NIP: 5210001234').\n"
-            "2. OSOBY PRYWATNE: Ignoruj postacie historyczne (np. Kopernik), firmy (np. Orlen) i urzędy.\n"
-            "3. ADRESY: Ignoruj adresy publiczne (np. Wiejska 4, Wawel) i nazwy miast jako osobne encje.\n"
-            "4. STOP META-DATA: Słowa takie jak 'PESEL', 'NIP', 'Email', 'Telefon' to ETYKIETY - NIGDY ich nie wypisuj.\n\n"
-            "### PRZYKŁADY NEGATYWNE (Tego NIE wypisuj):\n"
-            "- 'Mikołaj Kopernik' -> (ignoruj, postać historyczna)\n"
-            "- 'Urząd Skarbowy' -> (ignoruj, instytucja)\n"
-            "- 'NIP', 'PESEL' -> (ignoruj, to nazwa kategorii)\n"
-            "- 'System RAG' -> (ignoruj, termin techniczny)\n\n"
-            "### PRZYKŁADY POZYTYWNE (To wypisz):\n"
-            "- 'Jan Nowak' -> Jan Nowak\n"
-            "- 'ul. Kwiatowa 2/4, 00-123 Warszawa' -> ul. Kwiatowa 2/4, 00-123 Warszawa\n\n"
-            "TEKST DO ANALIZY:\n{text}"
-        )
-        
-        chain = prompt | structured_llm
-        result = chain.invoke({"text": text_to_analyze})
-        detected = result.detected_strings if result else []
-        error_msg = ""
-    except Exception as e:
-        error_msg = f"Detection failed: {e}"
-        detected = []
-        
-    unique_pii = list(set([p.strip() for p in detected if p.strip()]))
-    
-    print(f"[DEBUG: DETECTION] Wykryte PII: {unique_pii}")
-    print("="*50)
-    
-    return {
-        "raw_pii_strings": unique_pii,
-        "error_status": error_msg
-    }
-
-def hybrid_detection_agent(state: GraphState) -> GraphState:
-    """
-    Logika Sekwencyjna (Sequential Verification & Discovery):
-    1. Presidio znajduje kandydatów (wzorce numeryczne, adresy e-mail).
-    2. Kandydaci są przekazywani do Bielika jako kontekst.
-    3. Bielik weryfikuje kandydatów i szuka brakujących danych (np. nazwisk).
+    Samodzielny agent LLM (LLM-only). 
+    Wykorzystuje strategię Professional DPO (V10).
     """
     raw_text = state["raw_xml"] + "\n" + state["user_query"]
     
-    print("\n" + "="*50)
-    print("[DEBUG: HYBRID] Krok 1: Wstępna detekcja przez Presidio...")
-    
-    # 1. Pozyskanie kandydatów z Presidio
-    presidio_candidates = get_pii_candidates(raw_text)
-    print(f"[DEBUG: HYBRID] Kandydaci z Presidio: {presidio_candidates}")
-    
-    # 2. Przekazanie do Bielika w celu weryfikacji i rozszerzenia
     try:
-        llm = get_local_llm()
+        llm = get_llm("llm-only-detection")
         structured_llm = llm.with_structured_output(PIIData)
         
-        prompt = PromptTemplate.from_template(
-            "Jesteś ekspertem ochrony danych (DPO). Twoim zadaniem jest stworzenie OSTATECZNEJ listy danych PII.\n\n"
-            "SYSTEM PRESIDIO WYKRYŁ NASTĘPUJĄCYCH KANDYDATÓW:\n"
-            "{candidates}\n\n"
-            "TEKST DO ANALIZY:\n"
-            "{text}\n\n"
-            "TWOJE ZADANIA:\n"
-            "1. WERYFIKACJA: Sprawdź, czy kandydaci z Presidio faktycznie są danymi PII w tym kontekście. "
-            "Jeśli coś jest nazwą firmy, postacią historyczną lub adresem urzędu – ODRZUĆ TO.\n"
-            "2. ODKRYWANIE: Znajdź w tekście dane PII, których Presidio nie wykryło (szczególnie nazwiska, adresy prywatne).\n"
-            "3. CZYSZCZENIE: Zwróć same wartości (np. '5210001234'), bez etykiet typu 'NIP:'.\n\n"
-            "ZASADY NEGATYWNE (Czego NIE wypisywać):\n"
-            "- Nazw firm, urzędów, instytucji.\n"
-            "- Postaci historycznych i powszechnie znanych miejsc.\n"
-            "- Słów kluczowych: 'NIP', 'PESEL', 'E-mail', 'IBAN', 'REGON'.\n"
+        system_template = (
+            "Jesteś Ekspertem DPO (Data Protection Officer). Twoim zadaniem jest detekcja PII osób fizycznych.\n"
+            "ZASADY:\n"
+            "1. XML: Dane w tagach są zawsze prawdziwe.\n"
+            "2. FIRMY: Wyodrębnij nazwy firm, jeśli zawierają nazwiska (np. 'Kancelaria Jana Nowaka').\n"
+            "3. MIASTA: Wyodrębnij miasta, jeśli są częścią adresu lub miejsca zamieszkania.\n"
+            "4. FLEKSJA: Zachowaj formę z tekstu (np. 'Anny Nowak-Zielińskiej').\n"
+            "5. ODRZUĆ: Postacie historyczne (Kopernik) i duże korporacje."
         )
         
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_template),
+            ("human", "ANALIZUJ TEKST:\n{text}")
+        ])
+        
         chain = prompt | structured_llm
-        result = chain.invoke({
-            "candidates": ", ".join(presidio_candidates) if presidio_candidates else "Brak",
-            "text": raw_text
-        })
+        res = chain.invoke({"text": raw_text})
         
-        final_pii = result.detected_strings if result else []
-        
+        return {"raw_pii_strings": res.detected_strings, "error_status": ""}
     except Exception as e:
-        print(f"[Blad] Bielik zawiódł w fazie weryfikacji: {e}")
-        # W razie błędu LLM, zwracamy chociaż wyniki z Presidio jako fallback
-        final_pii = presidio_candidates
+        return {"raw_pii_strings": [], "error_status": str(e)}
 
-    print(f"[DEBUG: HYBRID] Ostateczne PII po weryfikacji Bielika: {final_pii}")
-    print("="*50)
+def hybrid_detection_agent(state: GraphState) -> GraphState:
+    """
+    Agent hybrydowy wykorzystujący strategię PROFESSIONAL_DPO (V10) 
+    z modelem Bielik (Local LLM) do weryfikacji kandydatów z Presidio.
+    """
+    raw_text = state["raw_xml"] + "\n" + state["user_query"]
+    presidio_candidates = get_pii_candidates(raw_text)
     
-    return {
-        "raw_pii_strings": list(set([p.strip() for p in final_pii if p.strip()])),
-        "error_status": ""
-    }
+    if not presidio_candidates:
+        return {"raw_pii_strings": [], "error_status": ""}
+
+    try:
+        # Używamy modelu skonfigurowanego w managerze dla detekcji hybrydowej
+        llm = get_llm("hybrid-detection")
+        structured_llm = llm.with_structured_output(PIIData)
+        
+        system_prompt = (
+            "Jesteś Ekspertem DPO. Twoim zadaniem jest weryfikacja kandydatów NER.\n"
+            "Kandydaci: {candidates}\n\n"
+            "ZASADY SELEKCJI:\n"
+            "1. ZATWIERDŹ: Osoby prywatne, ich NIP, PESEL i dane kontaktowe.\n"
+            "2. JDG: Zatwierdź nazwy firm jednoosobowych (np. 'Kancelaria Jana Nowaka').\n"
+            "3. MIASTA: Zatwierdź TYLKO jeśli wskazują miejsce zamieszkania/adres osoby.\n"
+            "4. ODRZUĆ: Korporacje, urzędy i postacie historyczne (Kopernik, Chopin).\n"
+            "5. ODRZUĆ: Miasta w kontekście ogólnym lub historycznym (np. 'urodził się w Toruniu')."
+        )
+
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_prompt),
+            ("human", "TEKST: {text}")
+        ])
+        
+        chain = prompt | structured_llm
+        res = chain.invoke({"text": raw_text, "candidates": ", ".join(presidio_candidates)})
+        
+        return {"raw_pii_strings": res.detected_strings, "error_status": ""}
+
+    except Exception as e:
+        return {"raw_pii_strings": presidio_candidates, "error_status": str(e)}

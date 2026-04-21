@@ -7,7 +7,7 @@ from guardrails.validator_base import FailResult, PassResult, ValidationResult
 from agents.presidio_engine import setup_presidio_analyzer
 from langchain_core.prompts import PromptTemplate
 from state import GraphState
-from llm_factory import get_cloud_llm
+from llm_manager import get_llm
 
 # Inicjalizacja silnika Presidio (singleton z konfiguracją PL)
 _analyzer = setup_presidio_analyzer()
@@ -66,7 +66,7 @@ def cloud_llm(state: GraphState) -> GraphState:
     if "GOOGLE_API_KEY" not in os.environ:
         return {**state, "error_status": "BŁĄD: Brak klucza GOOGLE_API_KEY."}
 
-    llm = get_cloud_llm()
+    llm = get_llm("main-cloud-llm")
     
     prompt_template = PromptTemplate.from_template(
         "Jesteś pomocnym asystentem księgowym. Odpowiadasz na pytania na podstawie danych z systemu ERP.\n"
