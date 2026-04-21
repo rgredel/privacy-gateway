@@ -43,7 +43,7 @@ def run_script(name: str, script_path: Path) -> bool:
 
     try:
         result = subprocess.run(
-            [sys.executable, str(script_path)],
+            [sys.executable, "-u", str(script_path)],
             cwd=str(PROJECT_ROOT),
             timeout=600,  # 10 minut na jeden eksperyment
         )

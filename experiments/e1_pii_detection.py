@@ -102,6 +102,8 @@ def run_gateway_detection(text: str) -> list[str]:
     }
     result = detection_agent(state)
     detected = result.get("raw_pii_strings", [])
+    if result.get("error_status"):
+        print(f"    [Gateway] BŁĄD: {result['error_status']}")
     print(f"    [Gateway] Wykryte: {detected}")
     return detected
 
@@ -123,6 +125,8 @@ def run_hybrid_detection(text: str) -> list[str]:
     }
     result = hybrid_detection_agent(state)
     detected = result.get("raw_pii_strings", [])
+    if result.get("error_status"):
+        print(f"    [Hybrid] BŁĄD: {result['error_status']}")
     print(f"    [Hybrid] Wykryte: {detected}")
     return detected
 

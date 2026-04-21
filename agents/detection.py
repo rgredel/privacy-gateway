@@ -1,6 +1,5 @@
 from pydantic import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_google_genai import ChatGoogleGenerativeAI
 from state import GraphState
 from llm_manager import get_llm
 from agents.presidio_engine import get_pii_candidates
@@ -45,7 +44,7 @@ def detection_agent(state: GraphState) -> GraphState:
 def hybrid_detection_agent(state: GraphState) -> GraphState:
     """
     Agent hybrydowy wykorzystujący strategię PROFESSIONAL_DPO (V10) 
-    z modelem Bielik (Local LLM) do weryfikacji kandydatów z Presidio.
+    z modelem do weryfikacji kandydatów z Presidio.
     """
     raw_text = state["raw_xml"] + "\n" + state["user_query"]
     presidio_candidates = get_pii_candidates(raw_text)
@@ -54,7 +53,6 @@ def hybrid_detection_agent(state: GraphState) -> GraphState:
         return {"raw_pii_strings": [], "error_status": ""}
 
     try:
-        # Używamy modelu skonfigurowanego w managerze dla detekcji hybrydowej
         llm = get_llm("hybrid-detection")
         structured_llm = llm.with_structured_output(PIIData)
         
