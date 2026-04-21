@@ -4,6 +4,8 @@ from state import GraphState
 from llm_manager import get_llm
 from agents.presidio_engine import get_pii_candidates
 
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+
 # Model danych dla ustrukturyzowanego wyjścia
 class PIIData(BaseModel):
     detected_strings: list[str] = Field(description="Lista ciągów znaków (strings) uznanych za PII lub do usunięcia.")
@@ -35,16 +37,31 @@ def detection_agent(state: GraphState) -> GraphState:
         ])
         
         chain = prompt | structured_llm
-        res = chain.invoke({"text": raw_text})
         
-        return {"raw_pii_strings": res.detected_strings, "error_status": ""}
+        # Map-Reduce: Chunking
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=200)
+        chunks = text_splitter.split_text(raw_text)
+        payloads = [{"text": chunk} for chunk in chunks]
+        
+        # Map-Reduce: Batch Processing
+        results = chain.batch(payloads, return_exceptions=True)
+        
+        # Map-Reduce: Reduce/Aggregation
+        aggregated_pii = set()
+        for res in results:
+            if isinstance(res, Exception): continue
+            if res and res.detected_strings:
+                for s in res.detected_strings:
+                    aggregated_pii.add(s.strip())
+        
+        return {"raw_pii_strings": list(aggregated_pii), "error_status": ""}
     except Exception as e:
         return {"raw_pii_strings": [], "error_status": str(e)}
 
 def hybrid_detection_agent(state: GraphState) -> GraphState:
     """
     Agent hybrydowy wykorzystujący strategię PROFESSIONAL_DPO (V10) 
-    z modelem do weryfikacji kandydatów z Presidio.
+    z modelem do weryfikacji kandydatów z Presidio oraz Map-Reduce.
     """
     raw_text = state["raw_xml"] + "\n" + state["user_query"]
     presidio_candidates = get_pii_candidates(raw_text)
@@ -76,9 +93,35 @@ def hybrid_detection_agent(state: GraphState) -> GraphState:
         ])
         
         chain = prompt | structured_llm
-        res = chain.invoke({"text": raw_text, "candidates": ", ".join(presidio_candidates)})
         
-        return {"raw_pii_strings": res.detected_strings, "error_status": ""}
+        # Map-Reduce: Chunking
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=150)
+        chunks = text_splitter.split_text(raw_text)
+        
+        # Przygotowanie paczek - filtrujemy kandydatów do tych widocznych w chunkach
+        payload_list = []
+        for chunk in chunks:
+            # Szybki filtr kandydatów dla danego kawałka tekstu
+            chunk_candidates = [c for c in presidio_candidates if c in chunk]
+            payload_list.append({
+                "text": chunk, 
+                "candidates": ", ".join(chunk_candidates) if chunk_candidates else "Brak"
+            })
+
+        # Map-Reduce: Parallel Batch Execution
+        results = chain.batch(payload_list, return_exceptions=True)
+        
+        # Map-Reduce: Aggregation (Reduce)
+        aggregated_pii = set()
+        for res in results:
+            if isinstance(res, Exception):
+                continue
+            if res and res.detected_strings:
+                for s in res.detected_strings:
+                    if s.strip():
+                        aggregated_pii.add(s.strip())
+        
+        return {"raw_pii_strings": list(aggregated_pii), "error_status": ""}
 
     except Exception as e:
         return {"raw_pii_strings": presidio_candidates, "error_status": str(e)}
