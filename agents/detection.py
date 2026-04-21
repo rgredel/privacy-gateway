@@ -57,19 +57,22 @@ def hybrid_detection_agent(state: GraphState) -> GraphState:
         structured_llm = llm.with_structured_output(PIIData)
         
         system_prompt = (
-            "Jesteś Ekspertem DPO. Twoim zadaniem jest weryfikacja kandydatów NER.\n"
-            "Kandydaci: {candidates}\n\n"
+            "Jesteś Ekspertem DPO. Twoim zadaniem jest precyzyjna filtracja kandydatów PII.\n"
             "ZASADY SELEKCJI:\n"
-            "1. ZATWIERDŹ: Osoby prywatne, ich NIP, PESEL i dane kontaktowe.\n"
-            "2. JDG: Zatwierdź nazwy firm jednoosobowych (np. 'Kancelaria Jana Nowaka').\n"
-            "3. MIASTA: Zatwierdź TYLKO jeśli wskazują miejsce zamieszkania/adres osoby.\n"
-            "4. ODRZUĆ: Korporacje, urzędy i postacie historyczne (Kopernik, Chopin).\n"
-            "5. ODRZUĆ: Miasta w kontekście ogólnym lub historycznym (np. 'urodził się w Toruniu')."
+            "1. ZACHOWAJ: Imiona, nazwiska, dane kontaktowe, PESEL, NIP (również firm jednoosobowych/JDG), numery kont.\n"
+            "2. ADRESY: Zachowaj miasta TYLKO jeśli wskazują adres zamieszkania, biura lub wysyłki osoby fizycznej (np. 'zamieszkały w Lublinie').\n"
+            "3. USUŃ: Postacie historyczne i sławne (np. Sienkiewicz, Matejko) oraz miasta w ich kontekście (np. 'urodził się w...', 'muzeum w...').\n"
+            "4. USUŃ: Duże korporacje (np. KGHM, Orlen), urzędy i dane testowe (np. same zera).\n"
+            "5. KONTEKST: Zawsze analizuj tekst, aby odróżnić dane osoby prywatnej od faktów ogólnych/historycznych.\n\n"
+            "PRZYKŁAD:\n"
+            "Tekst: 'Paweł Nowakowski z Lublina pisał o Henryku Sienkiewiczu z Woli Okrzejskiej.'\n"
+            "Kandydaci: Paweł Nowakowski, Lublina, Henryku Sienkiewiczu, Woli Okrzejskiej\n"
+            "Wynik: ['Paweł Nowakowski', 'Lublina']"
         )
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
-            ("human", "TEKST: {text}")
+            ("human", "TEKST: {text}\nKANDYDACI: {candidates}\nZWRÓĆ TYLKO LISTĘ ZATWIERDZONYCH FRAZ:")
         ])
         
         chain = prompt | structured_llm
