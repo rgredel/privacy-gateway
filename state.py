@@ -1,6 +1,8 @@
-from typing import TypedDict, Dict
+from typing import TypedDict, Dict, Annotated
+from langgraph.graph.message import add_messages
 
 class GraphState(TypedDict):
+    messages: Annotated[list, add_messages]  # Historia konwersacji (nowe!)
     raw_xml: str                         # Wejściowy plik XML jako czysty tekst (dla kontektu RAG)
     user_query: str                      # Pytanie zadane przez użytkownika
     raw_pii_strings: list[str]           # Zidentyfikowane informacje PII (surowe napisy z detekcji)

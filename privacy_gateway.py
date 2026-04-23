@@ -39,7 +39,19 @@ def sync_node(state: GraphState) -> GraphState:
     """Węzeł synchronizujący, zbiegają się tu równoległe wątki zabezpieczeń przed wejściem wyżej"""
     return state
 
-def build_graph():
+from langgraph.checkpoint.memory import MemorySaver
+
+# Inicjalizacja domyślnej pamięci (Checkpointer)
+_default_memory = MemorySaver()
+
+def build_graph(checkpointer=None):
+    """
+    Buduje graf LangGraph. 
+    Pozwala na przekazanie własnego checkpointera (np. do testów).
+    """
+    if checkpointer is None:
+        checkpointer = _default_memory
+
     workflow = StateGraph(GraphState)
 
     workflow.add_node("retrieval_agent", retrieval_agent)
@@ -54,7 +66,6 @@ def build_graph():
     workflow.set_entry_point("retrieval_agent")
     
     # 1. FAN-OUT (Współbieżność):
-    # Guardrail oraz Privacy Wrapper (detekcja+maskowanie) działają w tle jednocześnie.
     workflow.add_edge("retrieval_agent", "privacy_wrapper")
     workflow.add_edge("retrieval_agent", "guardrail_agent")
     
@@ -75,7 +86,9 @@ def build_graph():
     workflow.add_edge("re_identification_agent", END)
     workflow.add_edge("block_request", END)
 
-    return workflow.compile()
+    # Kompilacja z pamięcią (Persistence)
+    return workflow.compile(checkpointer=checkpointer)
+
 
 # ==========================================
 # 2. GŁÓWNA APLIKACJA / INTERFEJS
