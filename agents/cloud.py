@@ -138,9 +138,13 @@ def cloud_llm(state: GraphState) -> GraphState:
     
     # Zwracamy nową odpowiedź oraz aktualizację historii (wiadomości zostaną dodane przez add_messages)
     from langchain_core.messages import HumanMessage, AIMessage
+    # Przygotowanie debugu zapytania (do wyświetlenia w UI)
+    debug_prompt = "\n".join([f"[{m['role'].upper()}]: {m['content']}" for m in messages])
+
     return {
         "cloud_response": answer,
         "error_status": error,
-        "messages": [HumanMessage(content=query), AIMessage(content=answer)]
+        "messages": [HumanMessage(content=query), AIMessage(content=answer)],
+        "cloud_query_debug": debug_prompt
     }
 

@@ -125,3 +125,36 @@ def hybrid_detection_agent(state: GraphState) -> GraphState:
 
     except Exception as e:
         return {"raw_pii_strings": presidio_candidates, "error_status": str(e)}
+
+def ner_only_detection_agent(state: GraphState) -> GraphState:
+    """
+    Agent wykorzystujący wyłącznie silnik NER (Presidio + spaCy).
+    Pomija jakiekolwiek wywołania LLM. Bezpośrednio zwraca labeled_pii_entities.
+    """
+    raw_text = state["raw_xml"] + "\n" + state["user_query"]
+    from agents.presidio_engine import setup_presidio_analyzer
+    analyzer = setup_presidio_analyzer()
+    
+    if not analyzer:
+        return {"labeled_pii_entities": [], "error_status": "Błąd inicjalizacji Presidio"}
+
+    try:
+        results = analyzer.analyze(text=raw_text, language="pl")
+        labeled_entities = []
+        for r in results:
+            val = raw_text[r.start:r.end]
+            if val.strip():
+                labeled_entities.append({"value": val.strip(), "label": r.entity_type})
+        
+        # De-duplikacja
+        unique_entities = []
+        seen = set()
+        for ent in labeled_entities:
+            key = (ent["value"], ent["label"])
+            if key not in seen:
+                unique_entities.append(ent)
+                seen.add(key)
+
+        return {"labeled_pii_entities": unique_entities, "error_status": ""}
+    except Exception as e:
+        return {"labeled_pii_entities": [], "error_status": str(e)}

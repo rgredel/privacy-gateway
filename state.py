@@ -14,3 +14,8 @@ class GraphState(TypedDict):
     cloud_response: str                  # Wynik z zewnętrznego LLM (Gemini)
     final_output: str                    # Wynik u końcowego użytkownika (zdekodowany)
     error_status: str                    # Status błędu (np. błąd detekcji PII)
+    # Konfiguracja agentów (z UI)
+    enable_guardrail: bool               # Czy Guardrail Agent jest aktywny
+    detection_mode: str                  # Tryb detekcji: 'hybrid' lub 'llm-only'
+    show_debug: bool                     # Czy pokazywać logi debugowania
+    cloud_query_debug: str               # Pełne zapytanie wysłane do chmury (do celów debugowania)

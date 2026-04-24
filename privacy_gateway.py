@@ -1,9 +1,10 @@
 import os
-from langgraph.graph import StateGraph, END
+from langgraph.graph import StateGraph, END, START
 from state import GraphState
 from agents import (
-    retrieval_agent,
     detection_agent,
+    hybrid_detection_agent,
+    ner_only_detection_agent, # Dodano import agenta NER-only
     labeling_agent,
     masking_presidio_agent,
     guardrail_agent,
@@ -20,16 +21,32 @@ from agents import (
 def privacy_wrapper_agent(state: GraphState) -> GraphState:
     """Wraper łączący proces logiki prywatności (Detekcja -> Etykietowanie -> Maskowanie)"""
     # 1. Detekcja (wykrywa surowe napisy PII)
-    detect_res = detection_agent(state)
+    # Sprawdzamy tryb wybrany w UI (domyślnie hybrydowy)
+    mode = state.get("detection_mode", "hybrid")
+    
+    if mode == "ner-only":
+        print("[DEBUG: PRIVACY] Tryb detekcji: NER-Only (Presidio)")
+        detect_res = ner_only_detection_agent(state)
+        # W trybie NER-only etykietowanie jest już gotowe
+        label_res = {"labeled_pii_entities": detect_res.get("labeled_pii_entities", [])}
+    elif mode == "llm-only":
+        print("[DEBUG: PRIVACY] Tryb detekcji: LLM-Only")
+        detect_res = detection_agent(state)
+        # 2. Etykietowanie (nadaje typy wykrytym napisom)
+        internal_state_1 = {**state, **detect_res}
+        label_res = labeling_agent(internal_state_1)
+    else:
+        print("[DEBUG: PRIVACY] Tryb detekcji: Hybrid (Presidio + LLM)")
+        detect_res = hybrid_detection_agent(state)
+        # 2. Etykietowanie (nadaje typy wykrytym napisom)
+        internal_state_1 = {**state, **detect_res}
+        label_res = labeling_agent(internal_state_1)
+
     if detect_res.get("error_status"):
         return detect_res
 
-    # 2. Etykietowanie (nadaje typy wykrytym napisom)
-    internal_state_1 = {**state, **detect_res}
-    label_res = labeling_agent(internal_state_1)
-
     # 3. Maskowanie (Używamy teraz bezpieczniejszego silnika Presidio)
-    internal_state_2 = {**internal_state_1, **label_res}
+    internal_state_2 = {**state, **detect_res, **label_res}
     mask_res = masking_presidio_agent(internal_state_2)
     
     return {**detect_res, **label_res, **mask_res}
@@ -54,7 +71,6 @@ def build_graph(checkpointer=None):
 
     workflow = StateGraph(GraphState)
 
-    workflow.add_node("retrieval_agent", retrieval_agent)
     workflow.add_node("privacy_wrapper", privacy_wrapper_agent)
     workflow.add_node("guardrail_agent", guardrail_agent)
     workflow.add_node("sync_node", sync_node)
@@ -63,11 +79,10 @@ def build_graph(checkpointer=None):
     workflow.add_node("block_request", block_request)
     workflow.add_node("re_identification_agent", re_identification_agent)
 
-    workflow.set_entry_point("retrieval_agent")
-    
     # 1. FAN-OUT (Współbieżność):
-    workflow.add_edge("retrieval_agent", "privacy_wrapper")
-    workflow.add_edge("retrieval_agent", "guardrail_agent")
+    # Startujemy równolegle proces ochrony prywatności i weryfikację bezpieczeństwa
+    workflow.add_edge(START, "privacy_wrapper")
+    workflow.add_edge(START, "guardrail_agent")
     
     # 2. FAN-IN (Złączenie i Synchronizacja):
     workflow.add_edge("privacy_wrapper", "sync_node")

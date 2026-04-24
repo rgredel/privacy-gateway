@@ -4,9 +4,23 @@ import chainlit as cl
 from state import GraphState
 from privacy_gateway import build_graph
 from utils.file_handler import process_uploaded_file
+from chainlit.input_widget import Switch, Select
 
 @cl.on_chat_start
 async def on_chat_start():
+    # Konfiguracja ustawień w panelu bocznym
+    settings = await cl.ChatSettings([
+        Switch(id="enable_guardrail", label="Włącz Guardrail (Security)", initial=True),
+        Select(
+            id="detection_mode", 
+            label="Tryb Detekcji PII", 
+            values=["hybrid", "llm-only", "ner-only"], 
+            initial_value="hybrid"
+        ),
+        Switch(id="show_debug", label="Pokaż logi zabezpieczeń", initial=True)
+    ]).send()
+    cl.user_session.set("settings", settings)
+
     # Inicjalizacja grafu LangGraph (Checkpointer jest wbudowany w build_graph)
     app_graph = build_graph()
     cl.user_session.set("app_graph", app_graph)
@@ -14,27 +28,25 @@ async def on_chat_start():
     # Generowanie unikalnego ID wątku dla tej sesji rozmowy
     thread_id = str(uuid.uuid4())
     cl.user_session.set("thread_id", thread_id)
-    
-    try:
-        with open("fake_data.xml", "r", encoding="utf-8") as f:
-            xml_input = f.read()
-    except FileNotFoundError:
-        xml_input = "<root><info>Brak danych</info></root>"
-        
-    cl.user_session.set("xml_input", xml_input)
-    
+
     await cl.Message(
         content="🛡️ **Privacy Gateway UI uruchomiony!** \n\n"
-                "Możesz zadawać pytania, a także **dołączać pliki** (TXT, PDF z OCR, XML, obrazy). "
-                "Wszystko zostanie zanonimizowane przed wysłaniem do chmury. "
-                "Pamiętam też naszą rozmowę (Memory enabled!).", 
+                "Możesz konfigurować agenty w panelu bocznym (ikona suwaków). \n"
+                "Obsługuję pliki (TXT, PDF, XML, obrazy) i pamiętam kontekst rozmowy.", 
         author="System"
     ).send()
+    
+    # Generowanie unikalnego ID wątku dla tej sesji rozmowy
+
+@cl.on_settings_update
+async def setup_agent_config(settings):
+    cl.user_session.set("settings", settings)
+    await cl.Message(content="✅ Ustawienia agentów zostały zaktualizowane.").send()
 
 @cl.on_message
 async def on_message(message: cl.Message):
     app_graph = cl.user_session.get("app_graph")
-    xml_input = cl.user_session.get("xml_input")
+    xml_input = cl.user_session.get("xml_input", "")
     thread_id = cl.user_session.get("thread_id")
     
     # 1. Obsługa załączników (Files context)
@@ -58,17 +70,26 @@ async def on_message(message: cl.Message):
         cl.user_session.set("xml_input", xml_input)
 
     # 2. Przygotowanie stanu początkowego dla tej tury
-    # Uwaga: 'messages' nie ustawiamy ręcznie, LangGraph sam je dociągnie z checkpointera na podstawie thread_id
+    # Pobranie aktualnych ustawień z sesji
+    settings = cl.user_session.get("settings")
+    
     initial_state = {
         "raw_xml": xml_input,
         "user_query": message.content,
         "raw_pii_strings": [],
+        "labeled_pii_entities": [],
         "masked_context": "",
         "masked_query": "",
         "vault": {},
         "is_safe": False,
         "cloud_response": "",
-        "final_output": ""
+        "final_output": "",
+        "error_status": "",
+        "cloud_query_debug": "",
+        # Przekazanie ustawień z UI do LangGraph
+        "enable_guardrail": settings.get("enable_guardrail", True),
+        "detection_mode": settings.get("detection_mode", "hybrid"),
+        "show_debug": settings.get("show_debug", True)
     }
     
     # Konfiguracja dla pamięci
@@ -89,12 +110,17 @@ async def on_message(message: cl.Message):
     
     # 3. Budowa interfejsu debugowania
     debug_info = ""
-    if final_state.get("is_safe") and detected_pii:
-        debug_info += "\n\n---\n**⚠️ Logi Zabezpieczające:**\n"
-        debug_info += f"- **Skarbiec PII:** `{detected_pii}`\n"
-        debug_info += f"- **Ostatnie zamaskowane pytanie:**\n> `{masked_query}`"
-    elif final_state.get("is_safe") is False:
-        debug_info += "\n\n---\n**🛑 ZABLOKOWANO:** Atak typu Prompt Injection zatrzymany przez Guardrail Agent."
+    if settings.get("show_debug"):
+        if final_state.get("is_safe") and detected_pii:
+            debug_info += "\n\n---\n**⚠️ Logi Zabezpieczające:**\n"
+            debug_info += f"- **Skarbiec PII:** `{detected_pii}`\n"
+            debug_info += f"- **Ostatnie zamaskowane pytanie:**\n> `{masked_query}`"
+            
+            # Dodano wyświetlanie pełnego zapytania do chmury
+            cloud_debug = final_state.get("cloud_query_debug", "Brak danych")
+            debug_info += f"\n\n**☁️ Co widzi Cloud LLM (Gemini):**\n```\n{cloud_debug}\n```"
+        elif final_state.get("is_safe") is False:
+            debug_info += "\n\n---\n**🛑 ZABLOKOWANO:** Atak typu Prompt Injection zatrzymany przez Guardrail Agent."
         
     msg.content = final_output + debug_info
     await msg.update()

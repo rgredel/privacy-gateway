@@ -11,6 +11,11 @@ def guardrail_agent(state: GraphState) -> GraphState:
     """
     Analiza bezpieczeństwa zapytania użytkownika (Prompt Injection).
     """
+    # Sprawdzenie czy agent jest włączony w ustawieniach UI
+    if state.get("enable_guardrail") is False:
+        print("[DEBUG: GUARDRAIL] Agent wyłączony w ustawieniach.")
+        return {"is_safe": True}
+
     try:
         llm = get_llm("guardrail")
         structured_llm = llm.with_structured_output(GuardrailResult)
