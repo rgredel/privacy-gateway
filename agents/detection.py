@@ -18,7 +18,7 @@ def detection_agent(state: GraphState) -> GraphState:
     raw_text = state["raw_xml"] + "\n" + state["user_query"]
     
     try:
-        llm = get_llm("llm-only-detection")
+        llm = get_llm("llm-only-detection", state=state)
         structured_llm = llm.with_structured_output(PIIData)
         
         system_template = (
@@ -70,7 +70,7 @@ def hybrid_detection_agent(state: GraphState) -> GraphState:
         return {"raw_pii_strings": [], "error_status": ""}
 
     try:
-        llm = get_llm("hybrid-detection")
+        llm = get_llm("hybrid-detection", state=state)
         structured_llm = llm.with_structured_output(PIIData)
         
         system_prompt = (

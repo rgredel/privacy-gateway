@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 > nul
 title Uruchamianie Privacy Gateway (Chainlit w Python 3.12)
 color 0b
 

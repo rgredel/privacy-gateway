@@ -22,7 +22,7 @@ def labeling_agent(state: GraphState) -> GraphState:
     print(f"[DEBUG: LABELING] Klasyfikacja {len(raw_pii_strings)} encji PII...")
 
     try:
-        llm = get_llm("labeling")
+        llm = get_llm("labeling", state=state)
         structured_llm = llm.with_structured_output(LabelingData)
         
         prompt = PromptTemplate.from_template(

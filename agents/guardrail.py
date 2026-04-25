@@ -17,7 +17,7 @@ def guardrail_agent(state: GraphState) -> GraphState:
         return {"is_safe": True}
 
     try:
-        llm = get_llm("guardrail")
+        llm = get_llm("guardrail", state=state)
         structured_llm = llm.with_structured_output(GuardrailResult)
         
         prompt = PromptTemplate.from_template(

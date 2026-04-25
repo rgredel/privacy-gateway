@@ -10,12 +10,24 @@ from chainlit.input_widget import Switch, Select
 async def on_chat_start():
     # Konfiguracja ustawień w panelu bocznym
     settings = await cl.ChatSettings([
-        Switch(id="enable_guardrail", label="Włącz Guardrail (Security)", initial=True),
+        Switch(id="enable_guardrail", label="Włącz Guardrail (Security)", initial=False),
         Select(
             id="detection_mode", 
             label="Tryb Detekcji PII", 
             values=["hybrid", "llm-only", "ner-only"], 
-            initial_value="hybrid"
+            initial_value="ner-only"
+        ),
+        Select(
+            id="local_model", 
+            label="Model Przetwarzania PII (Lokalny lub Chmurowy)", 
+            values=["qooba/bielik-1.5b-v3.0-instruct:Q8_0", "llama3.2", "phi3", "gemini-2.5-flash", "gemini-1.5-pro"], 
+            initial_value="qooba/bielik-1.5b-v3.0-instruct:Q8_0"
+        ),
+        Select(
+            id="cloud_model", 
+            label="Model Chmurowy (GenAI)", 
+            values=["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"], 
+            initial_value="gemini-2.5-flash"
         ),
         Switch(id="show_debug", label="Pokaż logi zabezpieczeń", initial=True)
     ]).send()
@@ -86,9 +98,12 @@ async def on_message(message: cl.Message):
         "final_output": "",
         "error_status": "",
         "cloud_query_debug": "",
+        "privacy_warnings": [],
         # Przekazanie ustawień z UI do LangGraph
-        "enable_guardrail": settings.get("enable_guardrail", True),
-        "detection_mode": settings.get("detection_mode", "hybrid"),
+        "enable_guardrail": settings.get("enable_guardrail", False),
+        "detection_mode": settings.get("detection_mode", "ner-only"),
+        "cloud_model": settings.get("cloud_model", "gemini-2.5-flash"),
+        "local_model": settings.get("local_model", "qooba/bielik-1.5b-v3.0-instruct:Q8_0"),
         "show_debug": settings.get("show_debug", True)
     }
     
@@ -119,6 +134,13 @@ async def on_message(message: cl.Message):
             # Dodano wyświetlanie pełnego zapytania do chmury
             cloud_debug = final_state.get("cloud_query_debug", "Brak danych")
             debug_info += f"\n\n**☁️ Co widzi Cloud LLM (Gemini):**\n```\n{cloud_debug}\n```"
+            
+            # Dodano wyświetlanie ostrzeżeń o wyciekach PII
+            privacy_warnings = final_state.get("privacy_warnings", [])
+            if privacy_warnings:
+                debug_info += "\n\n**🛑 Ostrzeżenia o wyciekach (Anti-Leakage):**\n"
+                for warn in privacy_warnings:
+                    debug_info += f"- {warn}\n"
         elif final_state.get("is_safe") is False:
             debug_info += "\n\n---\n**🛑 ZABLOKOWANO:** Atak typu Prompt Injection zatrzymany przez Guardrail Agent."
         

@@ -19,3 +19,6 @@ class GraphState(TypedDict):
     detection_mode: str                  # Tryb detekcji: 'hybrid' lub 'llm-only'
     show_debug: bool                     # Czy pokazywać logi debugowania
     cloud_query_debug: str               # Pełne zapytanie wysłane do chmury (do celów debugowania)
+    privacy_warnings: list[str]          # Ostrzeżenia o potencjalnych wyciekach PII z walidatora
+    cloud_model: str                     # Wybrany model chmurowy (np. gemini-2.5-flash)
+    local_model: str                     # Wybrany model lokalny (np. bielik-1.5b)
