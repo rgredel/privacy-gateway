@@ -5,7 +5,6 @@ LLM_CONFIG = {
     "hybrid-detection": get_local_model,
     "llm-only-detection": get_local_model,
     "labeling": get_local_model,
-    "guardrail": get_local_model,
     "main-cloud-llm": get_cloud_gemini_2_5_flash
 }
 

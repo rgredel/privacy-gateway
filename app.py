@@ -4,13 +4,22 @@ import chainlit as cl
 from state import GraphState
 from privacy_gateway import build_graph
 from utils.file_handler import process_uploaded_file
-from chainlit.input_widget import Switch, Select
+from chainlit.input_widget import Switch, Select, Slider
 
 @cl.on_chat_start
 async def on_chat_start():
     # Konfiguracja ustawień w panelu bocznym
     settings = await cl.ChatSettings([
         Switch(id="enable_guardrail", label="Włącz Guardrail (Security)", initial=False),
+        Slider(
+            id="guardrail_threshold",
+            label="Próg czułości Guardrail (PromptGuard)",
+            initial=0.85,
+            min=0.5,
+            max=1.0,
+            step=0.05,
+            description="Im niższy próg, tym czulsze wykrywanie ataków (więcej fałszywych alarmów)."
+        ),
         Select(
             id="detection_mode", 
             label="Tryb Detekcji PII", 
@@ -101,6 +110,7 @@ async def on_message(message: cl.Message):
         "privacy_warnings": [],
         # Przekazanie ustawień z UI do LangGraph
         "enable_guardrail": settings.get("enable_guardrail", False),
+        "guardrail_threshold": settings.get("guardrail_threshold", 0.85),
         "detection_mode": settings.get("detection_mode", "ner-only"),
         "cloud_model": settings.get("cloud_model", "gemini-2.5-flash"),
         "local_model": settings.get("local_model", "qooba/bielik-1.5b-v3.0-instruct:Q8_0"),

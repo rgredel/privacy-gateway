@@ -16,6 +16,7 @@ class GraphState(TypedDict):
     error_status: str                    # Status błędu (np. błąd detekcji PII)
     # Konfiguracja agentów (z UI)
     enable_guardrail: bool               # Czy Guardrail Agent jest aktywny
+    guardrail_threshold: float           # Próg czułości PromptGuard (0.0-1.0, domyślnie 0.85)
     detection_mode: str                  # Tryb detekcji: 'hybrid' lub 'llm-only'
     show_debug: bool                     # Czy pokazywać logi debugowania
     cloud_query_debug: str               # Pełne zapytanie wysłane do chmury (do celów debugowania)
