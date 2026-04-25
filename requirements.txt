@@ -21,6 +21,8 @@ pandas
 matplotlib
 guardrails-ai
 
-# Prompt Injection Detection (PromptGuard-86M)
+# Prompt Injection Detection (PromptGuard-2 86M)
 transformers
 torch
+sentencepiece
+deep-translator

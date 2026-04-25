@@ -40,3 +40,11 @@ def get_prompt_guard_classifier():
         )
         print("[DEBUG: FACTORY] Model Llama-Prompt-Guard-2-86M załadowany.")
     return _prompt_guard_classifier
+
+def translate_pl_to_en(text: str) -> str:
+    """
+    Tłumaczy tekst z polskiego na angielski.
+    Używa Google Translate (deep-translator) — lekki, bez modeli lokalnych.
+    """
+    from deep_translator import GoogleTranslator
+    return GoogleTranslator(source="pl", target="en").translate(text)

@@ -1,14 +1,14 @@
 from state import GraphState
-from llm_factory import get_prompt_guard_classifier
+from llm_factory import get_prompt_guard_classifier, translate_pl_to_en
 
-# Domyślny próg decyzyjny — zapytania z P(injection/jailbreak) > THRESHOLD są blokowane
+# Domyślny próg decyzyjny — zapytania z P(malicious) > THRESHOLD są blokowane
 DEFAULT_THRESHOLD = 0.85
 
 
 def guardrail_agent(state: GraphState) -> GraphState:
     """
     Analiza bezpieczeństwa zapytania użytkownika (Prompt Injection / Jailbreak).
-    Używa dedykowanego modelu klasyfikacyjnego PromptGuard-86M zamiast ogólnego LLM.
+    Pipeline: tłumaczenie PL→EN (opus-mt) → klasyfikacja (PromptGuard-2 86M).
     """
     # Sprawdzenie czy agent jest włączony w ustawieniach UI
     if state.get("enable_guardrail") is False:
@@ -20,9 +20,12 @@ def guardrail_agent(state: GraphState) -> GraphState:
         query = state.get("user_query", "")
         threshold = state.get("guardrail_threshold", DEFAULT_THRESHOLD)
 
-        # Klasyfikacja — model zwraca etykiety: BENIGN / INJECTION / JAILBREAK
-        results = classifier(query)
-        # results = [{"label": "BENIGN", "score": 0.99}, ...]
+        # 1. Tłumaczenie PL → EN (model PromptGuard działa najlepiej na angielskim)
+        translated = translate_pl_to_en(query)
+        print(f"[DEBUG: GUARDRAIL] Tłumaczenie: '{query[:60]}' → '{translated[:60]}'")
+
+        # 2. Klasyfikacja przetłumaczonego tekstu
+        results = classifier(translated)
         top_result = results[0]
         label = top_result["label"]
         score = top_result["score"]
@@ -32,7 +35,7 @@ def guardrail_agent(state: GraphState) -> GraphState:
         is_safe = not is_malicious
 
         print("\n" + "#" * 50)
-        print(f"[DEBUG: GUARDRAIL] PromptGuard-86M | "
+        print(f"[DEBUG: GUARDRAIL] PromptGuard-2 | "
               f"Wynik: {label} (score={score:.4f}, próg={threshold}) → "
               f"{'✅ BEZPIECZNE' if is_safe else '🛑 ATAK!'}")
         print("#" * 50)
