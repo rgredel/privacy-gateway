@@ -27,8 +27,8 @@ def guardrail_agent(state: GraphState) -> GraphState:
         label = top_result["label"]
         score = top_result["score"]
 
-        # Prompt Guard 2 — klasyfikacja binarna: BENIGN / MALICIOUS
-        is_malicious = label == "MALICIOUS" and score > threshold
+        # Prompt Guard 2 — LABEL_0 = benign, LABEL_1 = malicious
+        is_malicious = label == "LABEL_1" and score > threshold
         is_safe = not is_malicious
 
         print("\n" + "#" * 50)
