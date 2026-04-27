@@ -1,6 +1,6 @@
 {
   "graphs": {
-    "privacy_gateway": "./privacy_gateway.py:graph"
+    "privacy_gateway": "./src/app/main.py:graph"
   },
   "env": ".env",
   "dependencies": ["."]

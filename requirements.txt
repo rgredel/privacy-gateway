@@ -5,6 +5,7 @@ langchain-ollama
 langchain-google-genai
 chainlit
 pydantic
+pydantic-settings
 python-dotenv
 
 # PII Detection (Presidio + spaCy)
