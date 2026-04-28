@@ -37,7 +37,7 @@ class ProcessPrivacyUseCase:
             A dictionary with updated state fields (raw_pii_strings, labeled_pii_entities, masked_context, etc.).
         """
         # 1. Detection
-        full_text = f"{state.raw_xml}\n{state.user_query}"
+        full_text = f"{state.file_context}\n{state.user_query}"
         raw_pii = await self.detection_service.detect(full_text)
         
         # 2. Labeling
@@ -45,7 +45,7 @@ class ProcessPrivacyUseCase:
         
         # 3. Masking
         masking_result = self.masking_service.mask(
-            context=state.raw_xml,
+            context=state.file_context,
             query=state.user_query,
             entities=labeled_entities
         )

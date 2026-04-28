@@ -2,7 +2,7 @@
 e1_pii_detection.py – Eksperyment 1: Ewaluacja skuteczności detekcji PII.
 
 Porównuje F1-score bramki Privacy Gateway (Bielik v3 via Ollama)
-z klasycznym NER (Microsoft Presidio + spaCy PL) na nieustrukturyzowanym
+z klasycznym NER (Microsoft Presidio + HerBERT Base NER) na nieustrukturyzowanym
 tekście naturalnym.
 
 Odpowiada na: Pytanie badawcze P1
@@ -75,58 +75,54 @@ def compute_metrics(detected: list[str], ground_truth: list[str]) -> dict:
 # ══════════════════════════════════════════════════════════════════════════════
 
 def run_presidio(analyzer, text: str) -> list[str]:
-    """Uruchamia Presidio z modułu agents i zwraca listę wykrytych PII."""
-    from agents.presidio_engine import get_pii_candidates
-    return get_pii_candidates(text, analyzer)
+    """Uruchamia Presidio z nowej infrastruktury i zwraca listę wykrytych PII."""
+    from src.app.infrastructure.services.presidio_service import PresidioService
+    ps = PresidioService(analyzer)
+    return ps.get_candidates(text)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 3. Privacy Gateway – detekcja Bielik oraz Hybrydowa
 # ══════════════════════════════════════════════════════════════════════════════
 
+import asyncio
+
 def run_gateway_detection(text: str) -> list[str]:
-    """Wywołuje detection_agent (LLM-only)."""
-    from agents.detection import detection_agent
-    state = {
-        "raw_xml": text,
-        "user_query": "",
-        "raw_pii_strings": [],
-        "labeled_pii_entities": [],
-        "masked_context": "",
-        "masked_query": "",
-        "vault": {},
-        "is_safe": False,
-        "cloud_response": "",
-        "final_output": "",
-        "error_status": ""
-    }
-    result = detection_agent(state)
-    detected = result.get("raw_pii_strings", [])
-    if result.get("error_status"):
-        print(f"    [Gateway] BŁĄD: {result['error_status']}")
+    """Wywołuje DetectionUseCase (LLM-only)."""
+    from src.app.core.config import settings
+    from src.app.infrastructure.llm.factory import get_local_model, get_cloud_gemini_2_5_flash
+    from src.app.infrastructure.llm.langchain_service import LangChainService
+    from src.app.use_cases.detection_use_case import DetectionUseCase
+    from src.app.infrastructure.services.presidio_service import PresidioService
+    
+    # Inicjalizacja zależności (tylko LLM-only, wiec analyzer=None jest ok)
+    local_llm = get_local_model(model_name=settings.local_model_default)
+    cloud_llm = get_cloud_gemini_2_5_flash(model_name=settings.cloud_model_default)
+    llm_service = LangChainService(local_llm=local_llm, cloud_llm=cloud_llm)
+    privacy_engine = PresidioService(analyzer=None)
+    
+    detection_uc = DetectionUseCase(llm_service=llm_service, privacy_engine=privacy_engine)
+    detected = asyncio.run(detection_uc.execute(text, mode="llm-only"))
     print(f"    [Gateway] Wykryte: {detected}")
     return detected
 
 def run_hybrid_detection(text: str) -> list[str]:
-    """Wywołuje hybrid_detection_agent (Presidio -> LLM)."""
-    from agents.detection import hybrid_detection_agent
-    state = {
-        "raw_xml": text,
-        "user_query": "",
-        "raw_pii_strings": [],
-        "labeled_pii_entities": [],
-        "masked_context": "",
-        "masked_query": "",
-        "vault": {},
-        "is_safe": False,
-        "cloud_response": "",
-        "final_output": "",
-        "error_status": ""
-    }
-    result = hybrid_detection_agent(state)
-    detected = result.get("raw_pii_strings", [])
-    if result.get("error_status"):
-        print(f"    [Hybrid] BŁĄD: {result['error_status']}")
+    """Wywołuje DetectionUseCase (Presidio -> LLM)."""
+    from src.app.core.config import settings
+    from src.app.infrastructure.llm.factory import get_local_model, get_cloud_gemini_2_5_flash
+    from src.app.infrastructure.llm.langchain_service import LangChainService
+    from src.app.use_cases.detection_use_case import DetectionUseCase
+    from src.app.infrastructure.services.presidio_factory import setup_presidio_analyzer
+    from src.app.infrastructure.services.presidio_service import PresidioService
+    
+    local_llm = get_local_model(model_name=settings.local_model_default)
+    cloud_llm = get_cloud_gemini_2_5_flash(model_name=settings.cloud_model_default)
+    llm_service = LangChainService(local_llm=local_llm, cloud_llm=cloud_llm)
+    analyzer = setup_presidio_analyzer()
+    privacy_engine = PresidioService(analyzer=analyzer)
+    
+    detection_uc = DetectionUseCase(llm_service=llm_service, privacy_engine=privacy_engine)
+    detected = asyncio.run(detection_uc.execute(text, mode="hybrid"))
     print(f"    [Hybrid] Wykryte: {detected}")
     return detected
 
@@ -143,7 +139,7 @@ def main():
     # Wczytanie korpusu
     if not CORPUS_PATH.exists():
         print(f"[BŁĄD] Brak korpusu: {CORPUS_PATH}")
-        print("       Uruchom najpierw: python experiments/corpus/generate_corpus.py")
+        print("       Zadbaj o obecność pliku corpus.json")
         sys.exit(1)
 
     with open(CORPUS_PATH, encoding="utf-8") as f:
@@ -153,7 +149,7 @@ def main():
     # ── Presidio ──────────────────────────────────────────────────────────
     # ── Presidio ──────────────────────────────────────────────────────────
     print("[E1] Konfiguracja Presidio (NER engine)...")
-    from agents.presidio_engine import setup_presidio_analyzer
+    from src.app.infrastructure.services.presidio_factory import setup_presidio_analyzer
     try:
         analyzer = setup_presidio_analyzer()
         presidio_available = analyzer is not None

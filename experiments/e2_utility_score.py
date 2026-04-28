@@ -34,34 +34,54 @@ def compute_bertscore(originals: list[str], masked_texts: list[str]):
     )
     return [{"f1": f.item()} for f in F1]
 
+import asyncio
+
 def run_masking_scenario(text: str, pii_list: list[str], mode: str):
     """Wykonuje maskowanie w jednym z trzech trybów."""
-    from agents.masking import masking_agent
-    from agents.masking_presidio import masking_presidio_agent
-    from agents.labeling import labeling_agent
+    from src.app.core.config import settings
+    from src.app.infrastructure.llm.factory import get_local_model, get_cloud_gemini_2_5_flash
+    from src.app.infrastructure.llm.langchain_service import LangChainService
+    from src.app.use_cases.labeling_use_case import LabelingUseCase
+    from src.app.infrastructure.services.presidio_service import PresidioService
     
-    state = {
-        "raw_xml": text,
-        "user_query": "",
-        "raw_pii_strings": pii_list,
-        "labeled_pii_entities": [],
-        "masked_context": "",
-        "masked_query": "",
-        "vault": {}
-    }
+    local_llm = get_local_model(model_name=settings.local_model_default)
+    cloud_llm = get_cloud_gemini_2_5_flash(model_name=settings.cloud_model_default)
+    llm_service = LangChainService(local_llm=local_llm, cloud_llm=cloud_llm)
+    privacy_engine = PresidioService(analyzer=None)
     
-    if mode == "semantic":
-        label_res = labeling_agent(state)
-        state.update(label_res)
-        mask_res = masking_agent(state)
-    elif mode == "native":
-        label_res = labeling_agent(state)
-        state.update(label_res)
-        mask_res = masking_presidio_agent(state)
+    labeling_uc = LabelingUseCase(llm_service=llm_service)
+    
+    # Krok 1: Etykietowanie
+    if mode in ["semantic", "native"]:
+        # Używamy LLM do etykietowania
+        entities_pydantic = asyncio.run(labeling_uc.execute(pii_list))
+        # Konwersja na dict dla maskowania
+        labeled_entities = [{"value": e.value, "label": e.label} for e in entities_pydantic]
     else: # generic
-        mask_res = masking_agent(state)
+        labeled_entities = [{"value": val, "label": "PII"} for val in pii_list]
         
-    return mask_res["masked_context"]
+    # Krok 2: Maskowanie
+    if mode == "native":
+        # Native: używamy bezpośrednio Presidio Anonymizer
+        from presidio_anonymizer.entities import RecognizerResult
+        # Tworzymy fałszywe wyniki RecognizerResult z etykiet na potrzeby Anonymizera
+        results = []
+        for e in labeled_entities:
+            start = text.find(e["value"])
+            if start != -1:
+                results.append(RecognizerResult(
+                    entity_type=e["label"], 
+                    start=start, 
+                    end=start+len(e["value"]), 
+                    score=1.0
+                ))
+        anonymized_result = privacy_engine.anonymizer.anonymize(text=text, analyzer_results=results)
+        masked_text = anonymized_result.text
+    else:
+        # Semantic & Generic: używamy własnej logiki podmieniania tekstowego (z PrivacyEngine)
+        masked_text, _ = privacy_engine.mask_text(text, labeled_entities)
+        
+    return masked_text
 
 def main():
     print("=" * 70)

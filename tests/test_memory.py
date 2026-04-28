@@ -29,10 +29,10 @@ def test_graph_memory_logic(mocker):
     config = {"configurable": {"thread_id": thread_id}}
     
     # Tura 1
-    app.invoke({"raw_xml": "X", "user_query": "Q1"}, config=config)
+    app.invoke({"file_context": "X", "user_query": "Q1"}, config=config)
     
     # Tura 2
-    res = app.invoke({"raw_xml": "X", "user_query": "Q2"}, config=config)
+    res = app.invoke({"file_context": "X", "user_query": "Q2"}, config=config)
     
     # Weryfikacja
     messages = res.get("messages", [])

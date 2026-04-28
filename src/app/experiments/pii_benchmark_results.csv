@@ -1,0 +1,5 @@
+pipeline,precision,recall,f1,false_positives,false_negatives,latency_per_1000_tokens
+Pipeline A (spaCy),0.5,0.625,0.5555555555555556,10,6,2.3576106343950545
+Pipeline B (Transformers),0.5384615384615384,0.4375,0.4827586206896552,6,9,4.407300267900739
+Pipeline C (Logic-Enhanced),0.5,0.4375,0.4666666666666667,7,9,3.7160260336739674
+Pipeline D (LLM-Augmented),0.5,0.4375,0.4666666666666667,7,9,4.23860890524728

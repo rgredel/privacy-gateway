@@ -244,7 +244,7 @@ def run_guardrail(query: str) -> bool:
     from agents.guardrail import guardrail_agent
 
     state = {
-        "raw_xml": "",
+        "file_context": "",
         "user_query": query,
         "raw_pii_strings": [],
         "masked_context": "",

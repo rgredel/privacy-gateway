@@ -1,0 +1,846 @@
+[
+    {
+        "pipeline": "Pipeline A (spaCy)",
+        "precision": 0.5,
+        "recall": 0.625,
+        "f1": 0.5555555555555556,
+        "false_positives": 10,
+        "false_negatives": 6,
+        "latency_per_1000_tokens": 2.3576106343950545,
+        "metrics_by_tag": {
+            "ORGANIZATION": {
+                "strict": {
+                    "correct": 0,
+                    "incorrect": 1,
+                    "partial": 0,
+                    "missed": 1,
+                    "spurious": 2,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 3,
+                    "possible": 2
+                },
+                "partial": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 1,
+                    "missed": 1,
+                    "spurious": 2,
+                    "precision": 0.16666666666666666,
+                    "recall": 0.25,
+                    "f1": 0.2,
+                    "actual": 3,
+                    "possible": 2
+                },
+                "ent_type": {
+                    "correct": 1,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 1,
+                    "spurious": 2,
+                    "precision": 0.3333333333333333,
+                    "recall": 0.5,
+                    "f1": 0.4,
+                    "actual": 3,
+                    "possible": 2
+                },
+                "exact": {
+                    "correct": 0,
+                    "incorrect": 1,
+                    "partial": 0,
+                    "missed": 1,
+                    "spurious": 2,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 3,
+                    "possible": 2
+                }
+            },
+            "LOCATION": {
+                "strict": {
+                    "correct": 1,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 0,
+                    "spurious": 3,
+                    "precision": 0.25,
+                    "recall": 1.0,
+                    "f1": 0.4,
+                    "actual": 4,
+                    "possible": 1
+                },
+                "partial": {
+                    "correct": 1,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 0,
+                    "spurious": 3,
+                    "precision": 0.25,
+                    "recall": 1.0,
+                    "f1": 0.4,
+                    "actual": 4,
+                    "possible": 1
+                },
+                "ent_type": {
+                    "correct": 1,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 0,
+                    "spurious": 3,
+                    "precision": 0.25,
+                    "recall": 1.0,
+                    "f1": 0.4,
+                    "actual": 4,
+                    "possible": 1
+                },
+                "exact": {
+                    "correct": 1,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 0,
+                    "spurious": 3,
+                    "precision": 0.25,
+                    "recall": 1.0,
+                    "f1": 0.4,
+                    "actual": 4,
+                    "possible": 1
+                }
+            },
+            "PERSON": {
+                "strict": {
+                    "correct": 9,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 0,
+                    "spurious": 4,
+                    "precision": 0.6923076923076923,
+                    "recall": 1.0,
+                    "f1": 0.8181818181818181,
+                    "actual": 13,
+                    "possible": 9
+                },
+                "partial": {
+                    "correct": 9,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 0,
+                    "spurious": 4,
+                    "precision": 0.6923076923076923,
+                    "recall": 1.0,
+                    "f1": 0.8181818181818181,
+                    "actual": 13,
+                    "possible": 9
+                },
+                "ent_type": {
+                    "correct": 9,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 0,
+                    "spurious": 4,
+                    "precision": 0.6923076923076923,
+                    "recall": 1.0,
+                    "f1": 0.8181818181818181,
+                    "actual": 13,
+                    "possible": 9
+                },
+                "exact": {
+                    "correct": 9,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 0,
+                    "spurious": 4,
+                    "precision": 0.6923076923076923,
+                    "recall": 1.0,
+                    "f1": 0.8181818181818181,
+                    "actual": 13,
+                    "possible": 9
+                }
+            },
+            "ID_NUMBER": {
+                "strict": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 4,
+                    "spurious": 0,
+                    "precision": 0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 0,
+                    "possible": 4
+                },
+                "partial": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 4,
+                    "spurious": 0,
+                    "precision": 0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 0,
+                    "possible": 4
+                },
+                "ent_type": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 4,
+                    "spurious": 0,
+                    "precision": 0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 0,
+                    "possible": 4
+                },
+                "exact": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 4,
+                    "spurious": 0,
+                    "precision": 0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 0,
+                    "possible": 4
+                }
+            }
+        }
+    },
+    {
+        "pipeline": "Pipeline B (Transformers)",
+        "precision": 0.5384615384615384,
+        "recall": 0.4375,
+        "f1": 0.4827586206896552,
+        "false_positives": 6,
+        "false_negatives": 9,
+        "latency_per_1000_tokens": 4.407300267900739,
+        "metrics_by_tag": {
+            "ORGANIZATION": {
+                "strict": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 2,
+                    "spurious": 1,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 1,
+                    "possible": 2
+                },
+                "partial": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 2,
+                    "spurious": 1,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 1,
+                    "possible": 2
+                },
+                "ent_type": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 2,
+                    "spurious": 1,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 1,
+                    "possible": 2
+                },
+                "exact": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 2,
+                    "spurious": 1,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 1,
+                    "possible": 2
+                }
+            },
+            "LOCATION": {
+                "strict": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 1,
+                    "spurious": 1,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 1,
+                    "possible": 1
+                },
+                "partial": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 1,
+                    "spurious": 1,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 1,
+                    "possible": 1
+                },
+                "ent_type": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 1,
+                    "spurious": 1,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 1,
+                    "possible": 1
+                },
+                "exact": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 1,
+                    "spurious": 1,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 1,
+                    "possible": 1
+                }
+            },
+            "PERSON": {
+                "strict": {
+                    "correct": 7,
+                    "incorrect": 2,
+                    "partial": 0,
+                    "missed": 0,
+                    "spurious": 2,
+                    "precision": 0.6363636363636364,
+                    "recall": 0.7777777777777778,
+                    "f1": 0.7000000000000001,
+                    "actual": 11,
+                    "possible": 9
+                },
+                "partial": {
+                    "correct": 7,
+                    "incorrect": 0,
+                    "partial": 2,
+                    "missed": 0,
+                    "spurious": 2,
+                    "precision": 0.7272727272727273,
+                    "recall": 0.8888888888888888,
+                    "f1": 0.7999999999999999,
+                    "actual": 11,
+                    "possible": 9
+                },
+                "ent_type": {
+                    "correct": 9,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 0,
+                    "spurious": 2,
+                    "precision": 0.8181818181818182,
+                    "recall": 1.0,
+                    "f1": 0.9,
+                    "actual": 11,
+                    "possible": 9
+                },
+                "exact": {
+                    "correct": 7,
+                    "incorrect": 2,
+                    "partial": 0,
+                    "missed": 0,
+                    "spurious": 2,
+                    "precision": 0.6363636363636364,
+                    "recall": 0.7777777777777778,
+                    "f1": 0.7000000000000001,
+                    "actual": 11,
+                    "possible": 9
+                }
+            },
+            "ID_NUMBER": {
+                "strict": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 4,
+                    "spurious": 0,
+                    "precision": 0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 0,
+                    "possible": 4
+                },
+                "partial": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 4,
+                    "spurious": 0,
+                    "precision": 0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 0,
+                    "possible": 4
+                },
+                "ent_type": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 4,
+                    "spurious": 0,
+                    "precision": 0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 0,
+                    "possible": 4
+                },
+                "exact": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 4,
+                    "spurious": 0,
+                    "precision": 0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 0,
+                    "possible": 4
+                }
+            }
+        }
+    },
+    {
+        "pipeline": "Pipeline C (Logic-Enhanced)",
+        "precision": 0.5,
+        "recall": 0.4375,
+        "f1": 0.4666666666666667,
+        "false_positives": 7,
+        "false_negatives": 9,
+        "latency_per_1000_tokens": 3.7160260336739674,
+        "metrics_by_tag": {
+            "ORGANIZATION": {
+                "strict": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 2,
+                    "spurious": 1,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 1,
+                    "possible": 2
+                },
+                "partial": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 2,
+                    "spurious": 1,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 1,
+                    "possible": 2
+                },
+                "ent_type": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 2,
+                    "spurious": 1,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 1,
+                    "possible": 2
+                },
+                "exact": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 2,
+                    "spurious": 1,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 1,
+                    "possible": 2
+                }
+            },
+            "LOCATION": {
+                "strict": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 1,
+                    "spurious": 1,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 1,
+                    "possible": 1
+                },
+                "partial": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 1,
+                    "spurious": 1,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 1,
+                    "possible": 1
+                },
+                "ent_type": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 1,
+                    "spurious": 1,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 1,
+                    "possible": 1
+                },
+                "exact": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 1,
+                    "spurious": 1,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 1,
+                    "possible": 1
+                }
+            },
+            "PERSON": {
+                "strict": {
+                    "correct": 7,
+                    "incorrect": 2,
+                    "partial": 0,
+                    "missed": 0,
+                    "spurious": 2,
+                    "precision": 0.6363636363636364,
+                    "recall": 0.7777777777777778,
+                    "f1": 0.7000000000000001,
+                    "actual": 11,
+                    "possible": 9
+                },
+                "partial": {
+                    "correct": 7,
+                    "incorrect": 0,
+                    "partial": 2,
+                    "missed": 0,
+                    "spurious": 2,
+                    "precision": 0.7272727272727273,
+                    "recall": 0.8888888888888888,
+                    "f1": 0.7999999999999999,
+                    "actual": 11,
+                    "possible": 9
+                },
+                "ent_type": {
+                    "correct": 9,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 0,
+                    "spurious": 2,
+                    "precision": 0.8181818181818182,
+                    "recall": 1.0,
+                    "f1": 0.9,
+                    "actual": 11,
+                    "possible": 9
+                },
+                "exact": {
+                    "correct": 7,
+                    "incorrect": 2,
+                    "partial": 0,
+                    "missed": 0,
+                    "spurious": 2,
+                    "precision": 0.6363636363636364,
+                    "recall": 0.7777777777777778,
+                    "f1": 0.7000000000000001,
+                    "actual": 11,
+                    "possible": 9
+                }
+            },
+            "ID_NUMBER": {
+                "strict": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 4,
+                    "spurious": 1,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 1,
+                    "possible": 4
+                },
+                "partial": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 4,
+                    "spurious": 1,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 1,
+                    "possible": 4
+                },
+                "ent_type": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 4,
+                    "spurious": 1,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 1,
+                    "possible": 4
+                },
+                "exact": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 4,
+                    "spurious": 1,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 1,
+                    "possible": 4
+                }
+            }
+        }
+    },
+    {
+        "pipeline": "Pipeline D (LLM-Augmented)",
+        "precision": 0.5,
+        "recall": 0.4375,
+        "f1": 0.4666666666666667,
+        "false_positives": 7,
+        "false_negatives": 9,
+        "latency_per_1000_tokens": 4.23860890524728,
+        "metrics_by_tag": {
+            "ORGANIZATION": {
+                "strict": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 2,
+                    "spurious": 1,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 1,
+                    "possible": 2
+                },
+                "partial": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 2,
+                    "spurious": 1,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 1,
+                    "possible": 2
+                },
+                "ent_type": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 2,
+                    "spurious": 1,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 1,
+                    "possible": 2
+                },
+                "exact": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 2,
+                    "spurious": 1,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 1,
+                    "possible": 2
+                }
+            },
+            "LOCATION": {
+                "strict": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 1,
+                    "spurious": 1,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 1,
+                    "possible": 1
+                },
+                "partial": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 1,
+                    "spurious": 1,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 1,
+                    "possible": 1
+                },
+                "ent_type": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 1,
+                    "spurious": 1,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 1,
+                    "possible": 1
+                },
+                "exact": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 1,
+                    "spurious": 1,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 1,
+                    "possible": 1
+                }
+            },
+            "PERSON": {
+                "strict": {
+                    "correct": 7,
+                    "incorrect": 2,
+                    "partial": 0,
+                    "missed": 0,
+                    "spurious": 2,
+                    "precision": 0.6363636363636364,
+                    "recall": 0.7777777777777778,
+                    "f1": 0.7000000000000001,
+                    "actual": 11,
+                    "possible": 9
+                },
+                "partial": {
+                    "correct": 7,
+                    "incorrect": 0,
+                    "partial": 2,
+                    "missed": 0,
+                    "spurious": 2,
+                    "precision": 0.7272727272727273,
+                    "recall": 0.8888888888888888,
+                    "f1": 0.7999999999999999,
+                    "actual": 11,
+                    "possible": 9
+                },
+                "ent_type": {
+                    "correct": 9,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 0,
+                    "spurious": 2,
+                    "precision": 0.8181818181818182,
+                    "recall": 1.0,
+                    "f1": 0.9,
+                    "actual": 11,
+                    "possible": 9
+                },
+                "exact": {
+                    "correct": 7,
+                    "incorrect": 2,
+                    "partial": 0,
+                    "missed": 0,
+                    "spurious": 2,
+                    "precision": 0.6363636363636364,
+                    "recall": 0.7777777777777778,
+                    "f1": 0.7000000000000001,
+                    "actual": 11,
+                    "possible": 9
+                }
+            },
+            "ID_NUMBER": {
+                "strict": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 4,
+                    "spurious": 1,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 1,
+                    "possible": 4
+                },
+                "partial": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 4,
+                    "spurious": 1,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 1,
+                    "possible": 4
+                },
+                "ent_type": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 4,
+                    "spurious": 1,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 1,
+                    "possible": 4
+                },
+                "exact": {
+                    "correct": 0,
+                    "incorrect": 0,
+                    "partial": 0,
+                    "missed": 4,
+                    "spurious": 1,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0,
+                    "actual": 1,
+                    "possible": 4
+                }
+            }
+        }
+    }
+]

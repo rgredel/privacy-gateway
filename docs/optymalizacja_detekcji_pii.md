@@ -32,7 +32,7 @@ Koncepcyjny kod na przyszłą przebudowę logiki agenta PII, nie do uruchomienia
 ```python
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 # W agent logic:
-text_to_analyze = state["raw_xml"]
+text_to_analyze = state["file_context"]
 
 text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=150)
 chunks = text_splitter.split_text(text_to_analyze)

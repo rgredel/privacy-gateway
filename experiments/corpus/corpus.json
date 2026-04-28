@@ -1,18 +1,18 @@
 [
   {
     "doc_id": 0,
-    "text": "Właścicielem firmy jest Anna Nowak-Zielińska o numerze NIP 5210001234.",
+    "text": "Właścicielem firmy jest Anna Nowak o numerze NIP 1234567890.",
     "pii": [
-      "Anna Nowak-Zielińska",
-      "5210001234"
+      "Anna Nowak",
+      "1234567890"
     ],
     "category": "simple"
   },
   {
     "doc_id": 1,
-    "text": "Wiadomość dotyczy Anny Nowak-Zielińskiej w sprawie zaległych składek.",
+    "text": "Wiadomość dotyczy Anny Nowak w sprawie zaległych składek.",
     "pii": [
-      "Anny Nowak-Zielińskiej"
+      "Anny Nowak"
     ],
     "category": "simple"
   },
@@ -55,12 +55,12 @@
   },
   {
     "doc_id": 6,
-    "text": "Zgodnie z umową, Tomasz Wiśniewski (firma Kancelaria Podatkowa Wiśniewski i Wspólnicy, NIP 1132567890) wystawi fakturę dla Anny Nowak-Zielińskiej na kwotę brutto 15420.50.",
+    "text": "Zgodnie z umową, Tomasz Wiśniewski (firma Kancelaria Podatkowa Wiśniewski i Wspólnicy, NIP 1132567890) wystawi fakturę dla Anny Nowak na kwotę brutto 1000.00.",
     "pii": [
       "Tomasz Wiśniewski",
       "Kancelaria Podatkowa Wiśniewski i Wspólnicy",
       "1132567890",
-      "Anny Nowak-Zielińskiej"
+      "Anny Nowak"
     ],
     "category": "complex"
   },

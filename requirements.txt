@@ -9,14 +9,16 @@ pydantic-settings
 python-dotenv
 
 # PII Detection (Presidio + spaCy)
-presidio-analyzer
+presidio-analyzer[transformers]
 presidio-anonymizer
 spacy
 langchain-experimental
 faker
+python-stdnum
 
 # Evaluation & Experiments
 bert-score
+nervaluate
 sentence-transformers
 pandas
 matplotlib

@@ -46,7 +46,7 @@ def main():
         gt = doc["pii"]
         
         state = {
-            "raw_xml": text, "user_query": "",
+            "file_context": text, "user_query": "",
             "raw_pii_strings": [], "labeled_pii_entities": [],
             "masked_context": "", "masked_query": "", "vault": {},
             "is_safe": False, "cloud_response": "", "final_output": "", "error_status": ""

@@ -26,7 +26,6 @@ REPORT_PATH = EXPERIMENTS_DIR / "report_summary.md"
 # ══════════════════════════════════════════════════════════════════════════════
 
 SCRIPTS = [
-    ("Generowanie korpusu", EXPERIMENTS_DIR / "corpus" / "generate_corpus.py"),
     ("E1 – Detekcja PII (F1-score)", EXPERIMENTS_DIR / "e1_pii_detection.py"),
     ("E2 – Utility Score (BERTScore)", EXPERIMENTS_DIR / "e2_utility_score.py"),
     ("E3 – Prompt Injection Red-Team", EXPERIMENTS_DIR / "e3_prompt_injection.py"),
@@ -41,14 +40,11 @@ def run_script(name: str, script_path: Path) -> bool:
     print(f"  Skrypt:     {script_path.name}")
     print(f"{'═' * 70}\n")
 
-    # Dynamiczny timeout – E2 i E3 mogą trwać dłużej
-    timeout = 1200 if "E2" in name or "E3" in name else 600
-
     try:
         result = subprocess.run(
             [sys.executable, "-u", str(script_path)],
             cwd=str(PROJECT_ROOT),
-            timeout=timeout,
+            timeout=600,  # 10 minut na jeden eksperyment
         )
         if result.returncode == 0:
             print(f"\n  ✔ {name} zakończony pomyślnie.")
@@ -57,7 +53,7 @@ def run_script(name: str, script_path: Path) -> bool:
             print(f"\n  ✘ {name} zakończony z kodem błędu {result.returncode}.")
             return False
     except subprocess.TimeoutExpired:
-        print(f"\n  ✘ {name} – timeout (>{timeout}s).")
+        print(f"\n  ✘ {name} – timeout (>600s).")
         return False
     except Exception as e:
         print(f"\n  ✘ {name} – błąd: {e}")
@@ -118,25 +114,22 @@ def generate_report(statuses: dict[str, bool]):
     lines.append("")
 
     # ── E2 ────────────────────────────────────────────────────────────────
-    lines.append("## Eksperyment 2 – Utility Score (Porównanie)")
+    lines.append("## Eksperyment 2 – Utility Score")
     lines.append("")
-    e2_data = read_csv(RESULTS_DIR / "results_e2_comparison.csv")
+    e2_data = read_csv(RESULTS_DIR / "results_e2.csv")
     if e2_data:
-        lines.append("| Doc ID | Kategoria | Generyczny | Semantyczny | Native | Poprawa (Sem) |")
-        lines.append("|--------|-----------|-----------:|------------:|-------:|--------------:|")
+        lines.append("| Doc ID | PII Count | BERTScore F1 | Degradacja % | Entropy Loss % |")
+        lines.append("|--------|----------:|-------------:|-------------:|---------------:|")
         for r in e2_data:
             lines.append(
-                f"| {r['doc_id']} | {r['category']} | {r['f1_generic']} | "
-                f"{r['f1_semantic']} | {r['f1_native']} | {r['improvement_sem']}% |"
+                f"| {r['doc_id']} | {r['pii_count']} | {r['bert_f1']} | "
+                f"{r['bert_degradation_pct']}% | {r['entropy_loss_pct']}% |"
             )
-        
-        # Średnie (wyliczane z wierszy)
-        avg_gen = sum(float(r["f1_generic"]) for r in e2_data) / len(e2_data)
-        avg_sem = sum(float(r["f1_semantic"]) for r in e2_data) / len(e2_data)
-        
-        status = "✅ PASS" if avg_sem >= avg_gen else "❌ FAIL"
+        # Średnie
+        avg_deg = sum(float(r["bert_degradation_pct"]) for r in e2_data) / len(e2_data)
+        status = "✅ PASS" if avg_deg < 15 else "❌ FAIL"
         lines.append("")
-        lines.append(f"**Średni BERTScore (Semantyczny): {avg_sem:.4f}** (vs Generyczny: {avg_gen:.4f}) → {status}")
+        lines.append(f"**Średnia degradacja BERTScore: {avg_deg:.2f}%** → {status} (próg < 15%)")
     else:
         lines.append("*Brak wyników – E2 nie został uruchomiony.*")
     lines.append("")
@@ -181,10 +174,10 @@ def generate_report(statuses: dict[str, bool]):
     lines.append("")
     e4_data = read_csv(RESULTS_DIR / "results_e4.csv")
     if e4_data:
-        lines.append("| Zapytanie | Direct [ms] | Gateway [ms] | Overhead [ms] | Payload Δ |")
+        lines.append("| Wariant | Direct [ms] | Gateway [ms] | Overhead [ms] | Payload Δ |")
         lines.append("|-----------|------------:|-------------:|--------------:|----------:|")
         for r in e4_data:
-            q_short = r["query"][:40] + "..." if len(r["query"]) > 40 else r["query"]
+            q_short = f"{r['size_label']} ({r['text_length']} znaków)"
             lines.append(
                 f"| {q_short} | {r['direct_mean_ms']} ± {r['direct_std_ms']} | "
                 f"{r['gateway_mean_ms']} ± {r['gateway_std_ms']} | "
@@ -229,8 +222,15 @@ def main():
     for name, script in SCRIPTS:
         ok = run_script(name, script)
         statuses[name] = ok
-        # Aktualizuj raport po każdym kroku, żeby użytkownik widział postęp
-        generate_report(statuses)
+
+    print("\n\n" + "=" * 70)
+    print("PODSUMOWANIE URUCHOMIEŃ")
+    print("=" * 70)
+    for name, ok in statuses.items():
+        icon = "✔" if ok else "✘"
+        print(f"  {icon} {name}")
+
+    generate_report(statuses)
 
 
 if __name__ == "__main__":

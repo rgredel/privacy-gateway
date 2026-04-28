@@ -17,8 +17,8 @@ import sys
 import time
 from pathlib import Path
 
-sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
+sys.stderr.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -28,27 +28,31 @@ RESULTS_CSV = RESULTS_DIR / "results_e4.csv"
 
 N_REPEATS = 3  # Liczba powtórzeń benchmarku per konfiguracja
 
-# Zapytania testowe
-TEST_QUERIES = [
-    "Jakie są dane kontrahenta z ostatniej faktury?",
-    "Z kim powinienem się kontaktować w sprawie zamówienia?",
-    "Na jakie konto mam przelać należność za fakturę?",
-]
+BASE_CONTEXT = """Firma Testowa Sp. z o.o., NIP: 1234567890, ul. Testowa 1, 00-001 Warszawa.
+Osobą kontaktową jest Anna Nowak (PESEL: 90010112345). 
+Prosimy o przelew na konto: PL12345678901234567890123456 do 14 dni.
+"""
+TEST_QUERY = "Wypisz wszystkie dane kontrahenta, w tym osoby kontaktowe i konta bankowe."
 
+TEXT_SIZES = [
+    ("Krótki (1x)", 1),
+    ("Średni (10x)", 10),
+    ("Długi (50x)", 50)
+]
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 1. Konfiguracja A – Bezpośredni Gemini (bez Gateway)
 # ══════════════════════════════════════════════════════════════════════════════
 
-def run_direct_gemini(xml_context: str, query: str) -> tuple[float, int]:
+def run_direct_gemini(context: str, query: str) -> tuple[float, int]:
     """
     Wysyła zapytanie bezpośrednio do Gemini (bez maskowania PII).
     Zwraca (czas_sekundy, rozmiar_payload_bajty).
     """
     from langchain_core.prompts import PromptTemplate
-    from llm_manager import get_llm
+    from src.app.infrastructure.llm.factory import get_cloud_gemini_2_5_flash
 
-    llm = get_llm("main-cloud-llm")
+    llm = get_cloud_gemini_2_5_flash()
 
     prompt = PromptTemplate.from_template(
         "Jesteś asystentem biznesowo-finansowym. "
@@ -58,32 +62,32 @@ def run_direct_gemini(xml_context: str, query: str) -> tuple[float, int]:
     )
 
     chain = prompt | llm
-    payload = xml_context + "\n" + query
+    payload = context + "\n" + query
     payload_size = len(payload.encode("utf-8"))
 
     start = time.perf_counter()
-    chain.invoke({"context": xml_context, "query": query})
+    chain.invoke({"context": context, "query": query})
     elapsed = time.perf_counter() - start
 
     return elapsed, payload_size
 
 
+import asyncio
+
 # ══════════════════════════════════════════════════════════════════════════════
 # 2. Konfiguracja B – Pełny Privacy Gateway (LangGraph)
 # ══════════════════════════════════════════════════════════════════════════════
 
-def run_with_gateway(xml_context: str, query: str) -> tuple[float, int, int]:
+def run_with_gateway(context: str, query: str) -> tuple[float, int, int]:
     """
     Uruchamia pełny przepływ LangGraph Privacy Gateway.
     Zwraca (czas_sekundy, rozmiar_raw_bajty, rozmiar_masked_bajty).
     """
-    from state import GraphState
-    from privacy_gateway import build_graph
-
-    app = build_graph()
+    from src.app.domain.entities import GraphState
+    from src.app.main import graph as app_graph
 
     initial_state = GraphState(
-        raw_xml=xml_context,
+        file_context=context,
         user_query=query,
         raw_pii_strings=[],
         masked_context="",
@@ -94,11 +98,13 @@ def run_with_gateway(xml_context: str, query: str) -> tuple[float, int, int]:
         final_output="",
     )
 
-    raw_payload_size = len((xml_context + "\n" + query).encode("utf-8"))
+    raw_payload_size = len((context + "\n" + query).encode("utf-8"))
 
     start = time.perf_counter()
-    final_state = app.invoke(initial_state)
+    final_state_dict = asyncio.run(app_graph.ainvoke(initial_state, config={"configurable": {"thread_id": "e4_test"}}))
     elapsed = time.perf_counter() - start
+
+    final_state = final_state_dict if isinstance(final_state_dict, dict) else final_state_dict.dict()
 
     masked_ctx = final_state.get("masked_context", "")
     masked_q = final_state.get("masked_query", "")
@@ -130,12 +136,11 @@ def calc_stats(values: list[float]) -> dict:
 
 def main():
     print("=" * 70)
-    print("EKSPERYMENT 4 – Latency Benchmark & Payload Reduction")
+    print("EKSPERYMENT 4 – Latency Benchmark & Payload Reduction (Scaling)")
     print("=" * 70)
 
     # Sprawdzenie klucza API
     if "GOOGLE_API_KEY" not in os.environ:
-        # Próba załadowania z .env
         env_path = PROJECT_ROOT / ".env"
         if env_path.exists():
             for line in env_path.read_text(encoding="utf-8").splitlines():
@@ -146,22 +151,16 @@ def main():
             print("[BŁĄD] Brak zmiennej GOOGLE_API_KEY. Ustaw ją w pliku .env lub środowisku.")
             sys.exit(1)
 
-    # Załaduj XML
-    xml_path = PROJECT_ROOT / "fake_data.xml"
-    if not xml_path.exists():
-        print(f"[BŁĄD] Brak pliku: {xml_path}")
-        sys.exit(1)
-
-    xml_context = xml_path.read_text(encoding="utf-8")
-    print(f"[E4] Załadowano kontekst XML ({len(xml_context)} bajtów).")
-    print(f"[E4] N = {N_REPEATS} powtórzeń per zapytanie per konfiguracja.\n")
+    print(f"[E4] N = {N_REPEATS} powtórzeń per wariant długości.\n")
 
     detail_rows = []
     summary_rows = []
 
-    for q_idx, query in enumerate(TEST_QUERIES):
+    for size_label, multiplier in TEXT_SIZES:
+        context = BASE_CONTEXT * multiplier
+        text_len = len(context)
         print(f"\n{'─' * 60}")
-        print(f"Zapytanie {q_idx + 1}: \"{query}\"")
+        print(f"Wariant: {size_label} ({text_len} znaków)")
         print(f"{'─' * 60}")
 
         direct_times = []
@@ -174,7 +173,7 @@ def main():
         print(f"\n  [A] Bezpośredni Gemini (bez Gateway):")
         for i in range(N_REPEATS):
             try:
-                elapsed, payload_size = run_direct_gemini(xml_context, query)
+                elapsed, payload_size = run_direct_gemini(context, TEST_QUERY)
                 direct_times.append(elapsed)
                 direct_payload_sizes.append(payload_size)
                 print(f"    Powtórzenie {i+1}/{N_REPEATS}: {elapsed*1000:.0f} ms, "
@@ -186,7 +185,7 @@ def main():
         print(f"\n  [B] Pełny Privacy Gateway (LangGraph):")
         for i in range(N_REPEATS):
             try:
-                elapsed, raw_size, masked_size = run_with_gateway(xml_context, query)
+                elapsed, raw_size, masked_size = run_with_gateway(context, TEST_QUERY)
                 gateway_times.append(elapsed)
                 gateway_raw_sizes.append(raw_size)
                 gateway_masked_sizes.append(masked_size)
@@ -196,7 +195,7 @@ def main():
             except Exception as e:
                 print(f"    Powtórzenie {i+1}/{N_REPEATS}: BŁĄD – {e}")
 
-        # ── Statystyki per zapytanie ──────────────────────────────────
+        # ── Statystyki per wariant ──────────────────────────────────
         direct_stats = calc_stats(direct_times)
         gateway_stats = calc_stats(gateway_times)
 
@@ -210,7 +209,8 @@ def main():
         # Detail rows
         for i in range(max(len(direct_times), len(gateway_times))):
             detail_rows.append({
-                "query_idx": q_idx,
+                "size_label": size_label,
+                "text_length": text_len,
                 "repeat": i + 1,
                 "direct_time_ms": round(direct_times[i] * 1000, 1) if i < len(direct_times) else "",
                 "direct_payload_B": direct_payload_sizes[i] if i < len(direct_payload_sizes) else "",
@@ -220,8 +220,8 @@ def main():
             })
 
         summary_rows.append({
-            "query_idx": q_idx,
-            "query": query,
+            "size_label": size_label,
+            "text_length": text_len,
             "direct_mean_ms": round(direct_stats["mean"] * 1000, 1),
             "direct_std_ms": round(direct_stats["std"] * 1000, 1),
             "gateway_mean_ms": round(gateway_stats["mean"] * 1000, 1),
@@ -239,7 +239,7 @@ def main():
     print("=" * 70)
 
     for s in summary_rows:
-        print(f"\n  Zapytanie {s['query_idx'] + 1}: \"{s['query'][:50]}...\"")
+        print(f"\n  Wariant: {s['size_label']} ({s['text_length']} znaków)")
         print(f"    Direct Gemini:   średnio {s['direct_mean_ms']:.0f} ± {s['direct_std_ms']:.0f} ms")
         print(f"    Z Gateway:       średnio {s['gateway_mean_ms']:.0f} ± {s['gateway_std_ms']:.0f} ms")
         print(f"    Overhead:        +{s['overhead_ms']:.0f} ms (+{s['overhead_pct']:.1f}%)")
@@ -275,7 +275,6 @@ def main():
 
     print(f"\n[E4] Wyniki szczegółowe → {detail_csv}")
     print(f"[E4] Wyniki sumaryczne → {RESULTS_CSV}")
-
 
 if __name__ == "__main__":
     main()
