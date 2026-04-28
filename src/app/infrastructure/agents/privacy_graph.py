@@ -59,9 +59,9 @@ def create_privacy_graph(
             pii_strings = await detection_uc.execute(text, mode=state.detection_mode)
             labeled_entities = await labeling_uc.execute(pii_strings)
         
-        # 3. Masking
+        # 3. Masking (with algorithmic context reduction for file_context)
         masked_query, vault_query = masking_uc.execute(state.user_query, labeled_entities)
-        masked_context, vault_context = masking_uc.execute(state.file_context, labeled_entities)
+        masked_context, vault_context = masking_uc.execute(state.file_context, labeled_entities, shorten=True)
         
         # Merge vaults to ensure all tokens are restorable
         combined_vault = {**vault_context, **vault_query}

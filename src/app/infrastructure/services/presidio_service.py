@@ -4,6 +4,7 @@ from presidio_anonymizer import AnonymizerEngine
 from presidio_anonymizer.entities import OperatorConfig
 
 from src.app.domain.ports import IPrivacyEngine
+from src.app.domain.entities import RecognizedEntity
 
 class PresidioService(IPrivacyEngine):
     """
@@ -19,6 +20,19 @@ class PresidioService(IPrivacyEngine):
         """Pobiera potencjalne PII (tylko wartości tekstowe)."""
         results = self.analyzer.analyze(text=text, language="pl")
         return [text[r.start:r.end] for r in results]
+
+    def analyze_detailed(self, text: str) -> List[RecognizedEntity]:
+        """Pobiera szczegółowe wyniki rozpoznawania wraz z pewnością (score)."""
+        results = self.analyzer.analyze(text=text, language="pl")
+        return [
+            RecognizedEntity(
+                value=text[r.start:r.end],
+                label=r.entity_type,
+                start=r.start,
+                end=r.end,
+                score=r.score
+            ) for r in results
+        ]
 
     def get_labeled_entities(self, text: str) -> List[Dict[str, str]]:
         """Pobiera potencjalne PII wraz z etykietami."""

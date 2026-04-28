@@ -87,41 +87,14 @@ def run_presidio(analyzer, text: str) -> list[str]:
 
 import asyncio
 
-def run_gateway_detection(text: str) -> list[str]:
+def run_gateway_detection(detection_uc, text: str) -> list[str]:
     """Wywołuje DetectionUseCase (LLM-only)."""
-    from src.app.core.config import settings
-    from src.app.infrastructure.llm.factory import get_local_model, get_cloud_gemini_2_5_flash
-    from src.app.infrastructure.llm.langchain_service import LangChainService
-    from src.app.use_cases.detection_use_case import DetectionUseCase
-    from src.app.infrastructure.services.presidio_service import PresidioService
-    
-    # Inicjalizacja zależności (tylko LLM-only, wiec analyzer=None jest ok)
-    local_llm = get_local_model(model_name=settings.local_model_default)
-    cloud_llm = get_cloud_gemini_2_5_flash(model_name=settings.cloud_model_default)
-    llm_service = LangChainService(local_llm=local_llm, cloud_llm=cloud_llm)
-    privacy_engine = PresidioService(analyzer=None)
-    
-    detection_uc = DetectionUseCase(llm_service=llm_service, privacy_engine=privacy_engine)
     detected = asyncio.run(detection_uc.execute(text, mode="llm-only"))
     print(f"    [Gateway] Wykryte: {detected}")
     return detected
 
-def run_hybrid_detection(text: str) -> list[str]:
+def run_hybrid_detection(detection_uc, text: str) -> list[str]:
     """Wywołuje DetectionUseCase (Presidio -> LLM)."""
-    from src.app.core.config import settings
-    from src.app.infrastructure.llm.factory import get_local_model, get_cloud_gemini_2_5_flash
-    from src.app.infrastructure.llm.langchain_service import LangChainService
-    from src.app.use_cases.detection_use_case import DetectionUseCase
-    from src.app.infrastructure.services.presidio_factory import setup_presidio_analyzer
-    from src.app.infrastructure.services.presidio_service import PresidioService
-    
-    local_llm = get_local_model(model_name=settings.local_model_default)
-    cloud_llm = get_cloud_gemini_2_5_flash(model_name=settings.cloud_model_default)
-    llm_service = LangChainService(local_llm=local_llm, cloud_llm=cloud_llm)
-    analyzer = setup_presidio_analyzer()
-    privacy_engine = PresidioService(analyzer=analyzer)
-    
-    detection_uc = DetectionUseCase(llm_service=llm_service, privacy_engine=privacy_engine)
     detected = asyncio.run(detection_uc.execute(text, mode="hybrid"))
     print(f"    [Hybrid] Wykryte: {detected}")
     return detected
@@ -146,21 +119,33 @@ def main():
         corpus = json.load(f)
     print(f"[E1] Załadowano {len(corpus)} dokumentów z korpusu.\n")
 
-    # ── Presidio ──────────────────────────────────────────────────────────
-    # ── Presidio ──────────────────────────────────────────────────────────
-    print("[E1] Konfiguracja Presidio (NER engine)...")
+    # ── Presidio i Use Case ────────────────────────────────────────────────
+    print("[E1] Konfiguracja serwisów...")
+    from src.app.core.config import settings
+    from src.app.infrastructure.llm.factory import get_local_model, get_cloud_gemini_2_5_flash
+    from src.app.infrastructure.llm.langchain_service import LangChainService
+    from src.app.use_cases.detection_use_case import DetectionUseCase
     from src.app.infrastructure.services.presidio_factory import setup_presidio_analyzer
+    from src.app.infrastructure.services.presidio_service import PresidioService
+    
     try:
         analyzer = setup_presidio_analyzer()
         presidio_available = analyzer is not None
         if presidio_available:
-            print("     ✔ Presidio gotowe.\n")
+            print("     ✔ Presidio/HerBERT gotowe.")
         else:
             raise Exception("setup_presidio_analyzer returned None")
     except Exception as e:
         print(f"     ✘ Presidio niedostępne: {e}")
-        print("     → Presidio pominięte.\n")
         presidio_available = False
+
+    local_llm = get_local_model(model_name=settings.local_model_default)
+    cloud_llm = get_cloud_gemini_2_5_flash(model_name=settings.cloud_model_default)
+    llm_service = LangChainService(local_llm=local_llm, cloud_llm=cloud_llm)
+    privacy_engine = PresidioService(analyzer=analyzer if presidio_available else None)
+    
+    detection_uc = DetectionUseCase(llm_service=llm_service, privacy_engine=privacy_engine)
+    print("     ✔ DetectionUseCase gotowy.\n")
 
     # ── Wyniki ────────────────────────────────────────────────────────────
     rows = []
@@ -178,7 +163,7 @@ def main():
 
         # 1. Gateway (Bielik only)
         try:
-            gw_detected = run_gateway_detection(text)
+            gw_detected = run_gateway_detection(detection_uc, text)
         except Exception as e:
             print(f"    [BŁĄD Gateway] {e}")
             gw_detected = []
@@ -200,7 +185,7 @@ def main():
 
         # 3. Hybrid (Sequential)
         try:
-            hb_detected = run_hybrid_detection(text)
+            hb_detected = run_hybrid_detection(detection_uc, text)
         except Exception as e:
             print(f"    [BŁĄD Hybrid] {e}")
             hb_detected = []

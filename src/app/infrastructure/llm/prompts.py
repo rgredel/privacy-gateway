@@ -27,6 +27,21 @@ DETECTION_PROMPT_HYBRID = ChatPromptTemplate.from_messages([
     ("human", "TEKST: {text}\nKANDYDACI: {candidates}\nZWRÓĆ TYLKO LISTĘ ZATWIERDZONYCH FRAZ:")
 ])
 
+JUDGE_PROMPT = ChatPromptTemplate.from_messages([
+    ("system", (
+        "Jesteś Sędzią PII (LLM-as-a-judge). Twoim zadaniem jest adjudykacja semantyczna potencjalnych wycieków danych.\n"
+        "STOSUJ PONIŻSZĄ RUBRYKĘ OCEN:\n"
+        "1. ZGODNOŚĆ Z TYPEM: Czy fragment pasuje do definicji (PERSON/ORG/LOC/ID)?\n"
+        "2. UNIKALNOŚĆ: Czy fragment pozwala na faktyczną identyfikację osoby w tym kontekście?\n"
+        "3. PLAUZYBILNOŚĆ: Czy np. numer w tym otoczeniu faktycznie pełni funkcję identyfikatora (PESEL), czy jest np. numerem seryjnym?\n\n"
+        "ZASADA Chain-of-Thought:\n"
+        "Zawsze najpierw przeprowadź rozumowanie (thought) analizując okno kontekstowe. "
+        "Dopiero potem wydaj werdykt.\n\n"
+        "FORMAT WYJŚCIOWY: Musisz zwrócić JSON zgodny ze strukturą AdjudicationResult."
+    )),
+    ("human", "KONTEKST: ...{window}...\nPOTENCJALNE PII: {value}\nETYKIETA NLP: {label}\n\nPRZEPROWADŹ ADJUDYKACJĘ:")
+])
+
 LABELING_PROMPT = PromptTemplate.from_template(
     "Jesteś DPO (Inspektorem Ochrony Danych). Sklasyfikuj podane elementy PII.\n\n"
     "### KONTEKST:\n"

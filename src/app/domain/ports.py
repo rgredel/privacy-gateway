@@ -1,5 +1,5 @@
 from typing import Protocol, List, Dict, Any, Optional
-from src.app.domain.entities import GraphState
+from src.app.domain.entities import GraphState, RecognizedEntity, AdjudicationResult, PIIEntity
 
 class IPIIDetectionService(Protocol):
     """Interface for PII detection services."""
@@ -29,6 +29,8 @@ class IPrivacyEngine(Protocol):
     """Interface for low-level privacy operations (Presidio/Regex)."""
     def get_candidates(self, text: str) -> List[str]:
         ...
+    def analyze_detailed(self, text: str) -> List[RecognizedEntity]:
+        ...
     def get_labeled_entities(self, text: str) -> List[Dict[str, str]]:
         ...
     def mask_text(self, text: str, pii_entities: List[Dict[str, str]]) -> tuple[str, Dict[str, str]]:
@@ -40,7 +42,9 @@ class ILLMService(Protocol):
     """Interface for the core LLM orchestration service."""
     async def analyze_pii(self, text: str, candidates: Optional[List[str]] = None) -> List[str]:
         ...
-    async def label_pii(self, pii_strings: List[str], context: str) -> List[Dict[str, str]]:
+    async def adjudicate_entities(self, text: str, entities: List[RecognizedEntity]) -> List[str]:
+        ...
+    async def label_pii(self, pii_strings: List[str]) -> List[PIIEntity]:
         ...
     async def verify_security(self, query: str, threshold: float) -> bool:
         ...

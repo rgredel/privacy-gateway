@@ -3,13 +3,14 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 
 from src.app.domain.ports import ILLMService
-from src.app.domain.entities import PIIData, PIIEntity, LabelingData
+from src.app.domain.entities import PIIData, PIIEntity, LabelingData, RecognizedEntity, AdjudicationResult
 from src.app.infrastructure.llm.prompts import (
     DETECTION_PROMPT_HYBRID, 
     DETECTION_SYSTEM_LLM_ONLY,
     LABELING_PROMPT,
     CLOUD_SYSTEM_PROMPT,
-    CLOUD_USER_PROMPT
+    CLOUD_USER_PROMPT,
+    JUDGE_PROMPT
 )
 
 class LangChainService(ILLMService):
@@ -49,16 +50,68 @@ class LangChainService(ILLMService):
                 "text": text,
                 "candidates": ", ".join(candidates) if candidates else "Brak"
             })
-        else:
-            # LLM-only Mode
-            prompt = ChatPromptTemplate.from_messages([
-                ("system", DETECTION_SYSTEM_LLM_ONLY),
-                ("human", "ANALIZUJ TEKST:\n{text}")
-            ])
-            chain = prompt | structured_llm
-            result = await chain.ainvoke({"text": text})
+        try:
+            if candidates is not None:
+                # Hybrid Mode
+                chain = DETECTION_PROMPT_HYBRID | structured_llm
+                result = await chain.ainvoke({
+                    "text": text,
+                    "candidates": ", ".join(candidates) if candidates else "Brak"
+                })
+            else:
+                # LLM-only Mode
+                prompt = ChatPromptTemplate.from_messages([
+                    ("system", DETECTION_SYSTEM_LLM_ONLY),
+                    ("human", "ANALIZUJ TEKST:\n{text}")
+                ])
+                chain = prompt | structured_llm
+                result = await chain.ainvoke({"text": text})
+                
+            return result.detected_strings if result else []
+        except Exception:
+            return []
+
+    async def adjudicate_entities(self, text: str, entities: List[RecognizedEntity]) -> List[str]:
+        """Performs semantic adjudication on a list of recognized entities using LLM-as-a-judge.
+        
+        Args:
+            text (str): Full original text for context extraction.
+            entities (List[RecognizedEntity]): Entities that triggered UDRIL.
             
-        return result.detected_strings if result else []
+        Returns:
+            List[str]: Verified PII strings.
+        """
+        if not entities:
+            return []
+            
+        judge_llm = self.local_llm.with_structured_output(AdjudicationResult)
+        chain = JUDGE_PROMPT | judge_llm
+        
+        payloads = []
+        for ent in entities:
+            # Extract context window: approx 150 chars before and after
+            start = max(0, ent.start - 150)
+            end = min(len(text), ent.end + 150)
+            window = text[start:end]
+            
+            payloads.append({
+                "window": window,
+                "value": ent.value,
+                "label": ent.label
+            })
+            
+        try:
+            results = await chain.abatch(payloads)
+            verified_pii = []
+            for ent, res in zip(entities, results):
+                if res and res.is_pii:
+                    # Use corrected value if provided, otherwise original
+                    val = res.corrected_value if res.corrected_value else ent.value
+                    verified_pii.append(val)
+            return verified_pii
+        except Exception:
+            # Fallback to original candidates if judge fails
+            return [e.value for e in entities]
 
     async def label_pii(self, pii_strings: List[str]) -> List[PIIEntity]:
         """Classifies detected PII strings into specific categories.

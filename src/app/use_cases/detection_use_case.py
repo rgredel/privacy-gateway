@@ -63,9 +63,30 @@ class DetectionUseCase:
         if mode == "llm-only":
             return await self.llm_service.analyze_pii(text)
             
-        # Hybrid Mode: Filter candidates via LLM
-        candidates = self.privacy_engine.get_candidates(text)
-        if not candidates:
+        # Hybrid Mode: LLM-as-a-Judge (UDRIL)
+        all_entities = self.privacy_engine.analyze_detailed(text)
+        if not all_entities:
             return []
+
+        # 1. Uncertainty-DRIven LLM triggering (UDRIL)
+        to_adjudicate = []
+        auto_accept = []
+        
+        for ent in all_entities:
+            # Low confidence (Grey Zone: 0.3 - 0.7)
+            is_uncertain = 0.3 <= ent.score <= 0.7
             
-        return await self.llm_service.analyze_pii(text, candidates=candidates)
+            # Semantic ambiguity (heuristic for certain labels)
+            is_ambiguous = ent.label in ["LOCATION", "ORGANIZATION"] and ent.score < 0.9
+            
+            if is_uncertain or is_ambiguous:
+                to_adjudicate.append(ent)
+            elif ent.score > 0.7:
+                auto_accept.append(ent.value)
+
+        # 2. Semantic Adjudication for uncertain entities
+        if to_adjudicate:
+            verified_pii = await self.llm_service.adjudicate_entities(text, to_adjudicate)
+            auto_accept.extend(verified_pii)
+            
+        return list(set(auto_accept))

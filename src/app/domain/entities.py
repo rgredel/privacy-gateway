@@ -28,6 +28,22 @@ class LabelingData(BaseModel):
     """
     entities: List[PIIEntity] = Field(description="List of classified PII entities")
 
+class RecognizedEntity(BaseModel):
+    """Entity recognized by a base NLP engine with its position and confidence."""
+    value: str
+    label: str
+    start: int
+    end: int
+    score: float
+
+class AdjudicationResult(BaseModel):
+    """Structured output from LLM-as-a-judge semantic adjudication."""
+    thought: str = Field(description="Chain-of-thought reasoning")
+    is_pii: bool = Field(description="Final verdict whether it is PII")
+    score: float = Field(description="Confidence score for the verdict")
+    corrected_value: Optional[str] = Field(None, description="Corrected string if boundaries were wrong")
+
+
 class GraphState(BaseModel):
     """
     Represents the state of the Privacy Gateway conversation graph.
