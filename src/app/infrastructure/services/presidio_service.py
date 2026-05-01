@@ -1,28 +1,46 @@
 from typing import List, Dict, Optional
-from presidio_analyzer import AnalyzerEngine, RecognizerResult
+from presidio_analyzer import AnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine
-from presidio_anonymizer.entities import OperatorConfig
 
 from src.app.domain.ports import IPrivacyEngine
-from src.app.domain.entities import RecognizedEntity
+from src.app.domain.entities import RecognizedEntity, PIIEntity
 
 class PresidioService(IPrivacyEngine):
-    """
-    Adapter dla biblioteki Microsoft Presidio.
-    Obsługuje detekcję (Analyzer) i anonimizację (Anonymizer).
+    """Adapter for Microsoft Presidio library.
+    
+    Handles PII detection (Analyzer) and anonymization (Anonymizer).
     """
     
-    def __init__(self, analyzer: AnalyzerEngine):
+    def __init__(self, analyzer: AnalyzerEngine) -> None:
+        """Initializes the service with a pre-configured analyzer engine.
+        
+        Args:
+            analyzer (AnalyzerEngine): Presidio analyzer with loaded recognizers.
+        """
         self.analyzer = analyzer
         self.anonymizer = AnonymizerEngine()
 
     def get_candidates(self, text: str) -> List[str]:
-        """Pobiera potencjalne PII (tylko wartości tekstowe)."""
+        """Extracts raw PII candidate strings from text.
+        
+        Args:
+            text (str): Input text.
+            
+        Returns:
+            List[str]: List of identified PII values.
+        """
         results = self.analyzer.analyze(text=text, language="pl")
         return [text[r.start:r.end] for r in results]
 
     def analyze_detailed(self, text: str) -> List[RecognizedEntity]:
-        """Pobiera szczegółowe wyniki rozpoznawania wraz z pewnością (score)."""
+        """Performs detailed analysis including positions and scores.
+        
+        Args:
+            text (str): Input text.
+            
+        Returns:
+            List[RecognizedEntity]: Detailed entity models.
+        """
         results = self.analyzer.analyze(text=text, language="pl")
         return [
             RecognizedEntity(
@@ -30,33 +48,45 @@ class PresidioService(IPrivacyEngine):
                 label=r.entity_type,
                 start=r.start,
                 end=r.end,
-                score=r.score
+                score=r.score,
+                recognizer=r.recognizer if hasattr(r, 'recognizer') else "unknown"
             ) for r in results
         ]
 
-    def get_labeled_entities(self, text: str) -> List[Dict[str, str]]:
-        """Pobiera potencjalne PII wraz z etykietami."""
+    def get_labeled_entities(self, text: str) -> List[PIIEntity]:
+        """Returns PII entities with their labels directly from the engine.
+        
+        Args:
+            text (str): Input text.
+            
+        Returns:
+            List[PIIEntity]: List of labeled entities.
+        """
         results = self.analyzer.analyze(text=text, language="pl")
         return [
-            {"value": text[r.start:r.end], "label": r.entity_type} 
+            PIIEntity(value=text[r.start:r.end], label=r.entity_type) 
             for r in results
         ]
 
-    def mask_text(self, text: str, pii_entities: List[Dict[str, str]]) -> tuple[str, Dict[str, str]]:
+    def mask_text(self, text: str, pii_entities: List[PIIEntity]) -> tuple[str, Dict[str, str]]:
+        """Masks the text using a vault-based mapping.
+        
+        Args:
+            text (str): Original text.
+            pii_entities (List[PIIEntity]): Entities to mask.
+            
+        Returns:
+            tuple[str, Dict[str, str]]: (Masked text, Vault).
         """
-        Maskuje tekst używając mapy pii_entities. 
-        Uwaga: W tej wersji upraszczamy do mapowania ręcznego lub używamy operatorów Presidio.
-        """
-        # Implementacja zorientowana na tagi [ETYKIETA_ID]
-        vault = {}
+        vault: Dict[str, str] = {}
         masked_text = text
         
-        # Sortujemy od najdłuższych, aby uniknąć błędów przy zagnieżdżonych frazach
-        sorted_entities = sorted(pii_entities, key=lambda x: len(x["value"]), reverse=True)
+        # Sort from longest to shortest to avoid partial replacements
+        sorted_entities = sorted(pii_entities, key=lambda x: len(x.value), reverse=True)
         
         for i, entity in enumerate(sorted_entities):
-            val = entity["value"]
-            label = entity["label"]
+            val = entity.value
+            label = entity.label
             token = f"[{label}_{i}]"
             vault[token] = val
             masked_text = masked_text.replace(val, token)
@@ -64,7 +94,15 @@ class PresidioService(IPrivacyEngine):
         return masked_text, vault
 
     def de_identify(self, text: str, vault: Dict[str, str]) -> str:
-        """Przywraca oryginalne wartości na podstawie skarbca."""
+        """Restores original values from the vault.
+        
+        Args:
+            text (str): Masked text.
+            vault (Dict[str, str]): Token -> Original mapping.
+            
+        Returns:
+            str: De-identified text.
+        """
         result = text
         for token, original in vault.items():
             result = result.replace(token, original)

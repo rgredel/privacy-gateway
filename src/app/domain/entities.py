@@ -35,6 +35,7 @@ class RecognizedEntity(BaseModel):
     start: int
     end: int
     score: float
+    recognizer: str = Field(default="unknown", description="Name of the recognizer that found the entity")
 
 class AdjudicationResult(BaseModel):
     """Structured output from LLM-as-a-judge semantic adjudication."""
@@ -42,6 +43,17 @@ class AdjudicationResult(BaseModel):
     is_pii: bool = Field(description="Final verdict whether it is PII")
     score: float = Field(description="Confidence score for the verdict")
     corrected_value: Optional[str] = Field(None, description="Corrected string if boundaries were wrong")
+
+class AdjudicationItem(BaseModel):
+    """Represents a single item in a multi-adjudication result."""
+    original_value: str = Field(description="The original value being adjudicated")
+    is_pii: bool = Field(description="Final verdict")
+    reasoning: str = Field(description="Brief reason for the decision")
+
+class MultiAdjudicationResult(BaseModel):
+    """Batch output from LLM-as-a-judge for multiple entities."""
+    thought: str = Field(description="General reasoning for the batch")
+    verdicts: List[AdjudicationItem] = Field(description="List of verdicts for each item")
 
 
 class GraphState(BaseModel):
@@ -89,6 +101,7 @@ class GraphState(BaseModel):
     detection_mode: str = Field(default="hybrid")
     show_debug: bool = Field(default=False)
     cloud_query_debug: str = Field(default="")
+    detection_debug: List[str] = Field(default_factory=list, description="Detailed logs from the detection pipeline")
     privacy_warnings: List[str] = Field(default_factory=list)
     cloud_model: str = Field(default="gemini-2.0-flash")
     local_model: str = Field(default="bielik-1.5b")

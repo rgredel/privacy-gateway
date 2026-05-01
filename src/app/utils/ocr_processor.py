@@ -1,55 +1,50 @@
-import fitz  # PyMuPDF
-from rapidocr_onnxruntime import RapidOCR
-import numpy as np
-from PIL import Image
-import io
+import pymupdf4llm
+from pathlib import Path
 
 class OCRProcessor:
-    def __init__(self):
-        # Inicjalizacja silnika OCR (ładowanie modeli przy pierwszym użyciu)
-        self.engine = RapidOCR()
+    """Professional "Out-of-the-box" document processor based on pymupdf4llm.
+    
+    Converts PDFs and images directly to Markdown format, preserving tables, 
+    headers, and layout without complex custom logic.
+    """
+    
+    def __init__(self) -> None:
+        """Initializes the processor. No engine initialization required for pymupdf4llm."""
+        pass
 
     def extract_text_from_pdf(self, pdf_path: str) -> str:
-        """
-        Ekstrahuje tekst z PDF. Próbuje najpierw tekstu warstwowego, 
-        a jeśli strona jest pusta/obrazkowa - używa OCR.
-        """
-        doc = fitz.open(pdf_path)
-        full_text = []
-
-        for page_index in range(len(doc)):
-            page = doc[page_index]
+        """Extracts text from a PDF file into Markdown format in a single call.
+        
+        Args:
+            pdf_path (str): The absolute or relative path to the PDF file.
             
-            # 1. Próba wyciągnięcia tekstu "cyfrowego"
-            text = page.get_text().strip()
+        Returns:
+            str: The extracted content in Markdown format.
+        """
+        try:
+            path_obj = Path(pdf_path).resolve()
+            if not path_obj.exists():
+                return f"[ERROR: File does not exist at path {pdf_path}]"
+                
+            # to_markdown automatically detects tables and document structure
+            return str(pymupdf4llm.to_markdown(str(path_obj)))
+        except Exception as e:
+            return f"\n[ERROR PDF4LLM: {str(e)}]\n"
+
+    def extract_text_from_image(self, image_path: str) -> str:
+        """Extracts text from an image file into Markdown format.
+        
+        Args:
+            image_path (str): The absolute or relative path to the image file.
             
-            # 2. Jeśli tekstu mało (np. tylko znaki specjalne lub pusta strona), użyj OCR
-            if len(text) < 50: 
-                # Renderowanie strony do obrazu
-                pix = page.get_pixmap(matrix=fitz.Matrix(2, 2)) # Zoom x2 dla lepszej jakości OCR
-                img_data = pix.tobytes("png")
-                img = Image.open(io.BytesIO(img_data))
-                
-                # Konwersja PIL Image na format akceptowany przez RapidOCR (numpy array)
-                img_np = np.array(img)
-                
-                # Uruchomienie OCR
-                result, _ = self.engine(img_np)
-                
-                if result:
-                    ocr_text = "\n".join([line[1] for line in result])
-                    full_text.append(f"--- Strona {page_index + 1} (OCR) ---\n{ocr_text}")
-                else:
-                    full_text.append(f"--- Strona {page_index + 1} (Brak tekstu) ---")
-            else:
-                full_text.append(f"--- Strona {page_index + 1} ---\n{text}")
+        Returns:
+            str: The extracted content in Markdown format.
+        """
+        try:
+            path_obj = Path(image_path).resolve()
+            if not path_obj.exists():
+                return f"[ERROR: File does not exist at path {image_path}]"
 
-        doc.close()
-        return "\n\n".join(full_text)
-
-    def extract_text_from_image(self, image_path_or_bytes) -> str:
-        """Obsługa bezpośrednich plików graficznych (jpg, png)."""
-        result, _ = self.engine(image_path_or_bytes)
-        if result:
-            return "\n".join([line[1] for line in result])
-        return ""
+            return str(pymupdf4llm.to_markdown(str(path_obj)))
+        except Exception as e:
+            return f"\n[ERROR IMAGE4LLM: {str(e)}]\n"

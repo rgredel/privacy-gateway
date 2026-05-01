@@ -139,9 +139,9 @@ def main():
         print(f"     ✘ Presidio niedostępne: {e}")
         presidio_available = False
 
-    local_llm = get_local_model(model_name=settings.local_model_default)
-    cloud_llm = get_cloud_gemini_2_5_flash(model_name=settings.cloud_model_default)
-    llm_service = LangChainService(local_llm=local_llm, cloud_llm=cloud_llm)
+    # UWAGA: Używamy Gemini 2.5 Flash do testu optymalizacji Recall
+    cloud_llm_judge = get_cloud_gemini_2_5_flash(model_name="gemini-2.5-flash")
+    llm_service = LangChainService(local_llm=cloud_llm_judge, cloud_llm=cloud_llm_judge)
     privacy_engine = PresidioService(analyzer=analyzer if presidio_available else None)
     
     detection_uc = DetectionUseCase(llm_service=llm_service, privacy_engine=privacy_engine)

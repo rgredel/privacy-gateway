@@ -4,6 +4,7 @@ import chainlit as cl
 from src.app.main import graph as app_graph
 from src.app.utils.file_handler import process_uploaded_file
 from chainlit.input_widget import Switch, Select, Slider
+from langchain_core.messages import HumanMessage
 from src.app.domain.entities import GraphState
 
 @cl.on_chat_start
@@ -54,8 +55,6 @@ async def on_chat_start():
                 "Obsługuję pliki (TXT, PDF, XML, obrazy) i pamiętam kontekst rozmowy.", 
         author="System"
     ).send()
-    
-    # Generowanie unikalnego ID wątku dla tej sesji rozmowy
 
 @cl.on_settings_update
 async def setup_agent_config(settings):
@@ -91,6 +90,7 @@ async def on_message(message: cl.Message):
     # 2. Prepare initial state for the graph
     settings = cl.user_session.get("settings")
     
+    # Pamięć rozmowy: wiadomości są teraz zarządzane przez węzły grafu (PrivacyWrapper i Re-id)
     initial_state = GraphState(
         file_context=xml_input,
         user_query=message.content,
@@ -127,6 +127,12 @@ async def on_message(message: cl.Message):
         if final_state.masked_context:
             context_snippet = final_state.masked_context[:200] + "..." if len(final_state.masked_context) > 200 else final_state.masked_context
             debug_info += f"- **Masked Context (Files):**\n```\n{context_snippet}\n```\n"
+
+        # Show detection pipeline steps
+        if final_state.detection_debug:
+            debug_info += "\n**🔍 Detection Pipeline Details:**\n"
+            for log in final_state.detection_debug:
+                debug_info += f"- {log}\n"
 
         # Show cloud LLM prompt details
         cloud_debug = final_state.cloud_query_debug or "No data available"

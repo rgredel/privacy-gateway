@@ -31,16 +31,47 @@ stateDiagram-v2
     ReIdentification --> [*] : Final Output
     
     BlockRequest --> [*] : Error Message
+## Hybrid PII Adjudication (UDRIL)
+
+This diagram describes the **Uncertainty-DRIven LLM triggering** flow used in Hybrid mode to maximize precision while minimizing costs.
+
+```mermaid
+stateDiagram-v2
+    direction TB
+    [*] --> NER_Ensemble
+    
+    state NER_Ensemble {
+        direction LR
+        HerBERT_ML --> MergeResults
+        SpaCy_ML --> MergeResults
+        Rules_Regex --> MergeResults
+    }
+    
+    MergeResults --> EvaluateConfidence
+    
+    EvaluateConfidence --> AutoAccept : High Confidence / Validated Rule
+    EvaluateConfidence --> TriggerJudge : Low Confidence / Model Conflict / Ambiguity
+    
+    TriggerJudge --> ReduceContext : Algorithmic Context Shortening
+    ReduceContext --> LLM_Adjudication : Send minimal fragments
+    
+    LLM_Adjudication --> VerifyEntities : Chain-of-Thought Reasoning
+    
+    VerifyEntities --> FinalList : Entity confirmed
+    VerifyEntities --> DiscardEntity : Entity rejected
+    AutoAccept --> FinalList
+    
+    FinalList --> [*]
 ```
 
 ### Node Descriptions
 
 | Node | Responsibility | Use Case Involved |
 | :--- | :--- | :--- |
-| **PrivacyWrapper** | Orchestrates PII detection, labeling, and masking for both query and context. | `DetectionUseCase`, `LabelingUseCase`, `MaskingUseCase` |
-| **GuardrailNode** | Checks the input query for malicious intent or disallowed topics. | `GuardrailUseCase` |
+| **PrivacyWrapper** | Orchestrates PII detection, labeling, and masking for both query and context. Uses dynamic model selection (e.g., Bielik) via the LLM Factory. | `DetectionUseCase`, `LabelingUseCase`, `MaskingUseCase` |
+| **GuardrailNode** | Checks the input query for malicious intent or disallowed topics using PromptGuard. | `GuardrailUseCase` |
 | **SyncNode** | Waits for both parallel processes to complete and merges their states. | N/A |
-| **CloudLLM** | Sends the masked query and context to a high-performance cloud model. | `CloudProcessingUseCase` |
+| **CloudLLM** | Sends the masked query and context to a high-performance cloud model (e.g., Gemini) selected dynamically. | `CloudProcessingUseCase` |
 | **BlockRequest** | Returns a standardized error message if the input is deemed unsafe. | N/A |
 | **ReIdentification** | Replaces PII tokens in the LLM response with original values from the vault. | N/A (Internal logic) |
 

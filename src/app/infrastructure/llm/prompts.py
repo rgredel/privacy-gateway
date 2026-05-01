@@ -42,6 +42,23 @@ JUDGE_PROMPT = ChatPromptTemplate.from_messages([
     ("human", "KONTEKST: ...{window}...\nPOTENCJALNE PII: {value}\nETYKIETA NLP: {label}\n\nPRZEPROWADŹ ADJUDYKACJĘ:")
 ])
 
+JUDGE_BATCH_PROMPT = ChatPromptTemplate.from_messages([
+    ("system", (
+        "Jesteś Sędzią PII (LLM-as-a-judge). Otrzymasz tekst oraz listę potencjalnych fragmentów PII znalezionych przez silnik NER.\n"
+        "Twoim zadaniem jest rozstrzygnięcie dla KAŻDEGO fragmentu, czy w danym kontekście stanowi on daną osobową (PII).\n\n"
+        "ZASADY ADJUDYKACJI:\n"
+        "1. PERSON: Akceptuj imiona i nazwiska osób fizycznych. Odrzucaj postacie historyczne/fikcyjne.\n"
+        "2. LOCATION: Akceptuj adresy i miasta tylko jeśli wskazują na miejsce zamieszkania/pobytu osoby. Odrzucaj ogólne nazwy geograficzne.\n"
+        "3. ORGANIZATION: Akceptuj firmy jednoosobowe (JDG) i małe biura. Odrzucaj wielkie korporacje (np. Google, Orlen) i urzędy.\n"
+        "4. ID_NUMBER: Akceptuj numery identyfikacyjne (PESEL/NIP) tylko jeśli kontekst sugeruje dane klienta/pracownika.\n\n"
+        "ZASADA Chain-of-Thought:\n"
+        "W polu 'thought' krótko przeanalizuj cały tekst. Następnie w polu 'verdicts' zwróć werdykt dla każdego elementu z listy.\n"
+        "BARDZO WAŻNE: W polu 'original_value' musisz podać DOKŁADNIE taką samą frazę, jaką otrzymałeś na liście kandydatów (zachowaj wielkość liter i interpunkcję).\n"
+        "ZWRÓĆ JSON ZGODNY ZE STRUKTURĄ MultiAdjudicationResult."
+    )),
+    ("human", "TEKST DO ANALIZY:\n{text}\n\nLISTA KANDYDATÓW DO ROZSTRZYGNIĘCIA (zachowaj te wartości w 'original_value'):\n{candidates}\n\nPRZEPROWADŹ ZBIORCZĄ ADJUDYKACJĘ:")
+])
+
 LABELING_PROMPT = PromptTemplate.from_template(
     "Jesteś DPO (Inspektorem Ochrony Danych). Sklasyfikuj podane elementy PII.\n\n"
     "### KONTEKST:\n"

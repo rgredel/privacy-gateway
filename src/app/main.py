@@ -23,10 +23,7 @@ def bootstrap_app():
     from src.app.infrastructure.llm.factory import get_local_model, get_cloud_gemini_2_5_flash, get_prompt_guard_classifier, translate_pl_to_en
     from src.app.infrastructure.services.presidio_factory import setup_presidio_analyzer
     
-    local_llm = get_local_model(model_name=settings.local_model_default)
-    cloud_llm = get_cloud_gemini_2_5_flash(model_name=settings.cloud_model_default)
-    
-    llm_service = LangChainService(local_llm=local_llm, cloud_llm=cloud_llm)
+    llm_service = LangChainService()
     
     analyzer = setup_presidio_analyzer()
     privacy_engine = PresidioService(analyzer=analyzer)

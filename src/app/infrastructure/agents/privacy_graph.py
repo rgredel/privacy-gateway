@@ -1,4 +1,6 @@
 from langgraph.graph import StateGraph, END, START
+from langgraph.checkpoint.memory import MemorySaver
+from langchain_core.messages import HumanMessage, AIMessage
 from typing import Dict, Any
 
 from src.app.domain.entities import GraphState
@@ -16,8 +18,11 @@ def create_privacy_graph(
     guardrail_uc: GuardrailUseCase,
     cloud_uc: CloudProcessingUseCase,
     privacy_engine: IPrivacyEngine
-):
+) -> StateGraph:
     """Factory to create the LangGraph StateGraph with injected use cases.
+
+    This graph coordinates the privacy preservation workflow: guardrails, 
+    detection, masking, cloud processing, and re-identification.
 
     Args:
         detection_uc: Use case for PII detection.
@@ -28,7 +33,7 @@ def create_privacy_graph(
         privacy_engine: Engine for underlying privacy operations (e.g. Presidio).
 
     Returns:
-        Compiled StateGraph: The executable privacy workflow.
+        StateGraph: Compiled and executable LangGraph workflow.
     """
     
     workflow = StateGraph(GraphState)
@@ -38,47 +43,52 @@ def create_privacy_graph(
     async def privacy_wrapper_node(state: GraphState) -> Dict[str, Any]:
         """Node for PII detection, labeling, and masking.
 
-        Combines file context and user query, detects PII, and applies masking.
-        Returns updated state with masked contents and the PII vault.
-
         Args:
-            state: Current graph state.
+            state (GraphState): Current conversation state.
 
         Returns:
-            Dict[str, Any]: State updates for PII related fields.
+            Dict[str, Any]: Updates for state containing masked text and vault.
         """
         text = f"{state.file_context}\n{state.user_query}"
         
         # 1. Detection and Labeling
         if state.detection_mode == "ner-only":
-            # Direct labels from engine, bypassing LLM for speed
-            labeled_entities = privacy_engine.get_labeled_entities(text)
-            pii_strings = [e["value"] for e in labeled_entities]
+            new_labeled_entities = privacy_engine.get_labeled_entities(text)
+            pii_strings = [e.value for e in new_labeled_entities]
+            detection_logs = [f"NER-only mode: Found {len(pii_strings)} entities locally."]
         else:
-            # Multi-agent approach with chunking support
-            pii_strings = await detection_uc.execute(text, mode=state.detection_mode)
-            labeled_entities = await labeling_uc.execute(pii_strings)
+            pii_strings, detection_logs = await detection_uc.execute(
+                text, 
+                model_name=state.local_model, 
+                mode=state.detection_mode
+            )
+            new_labeled_entities = await labeling_uc.execute(pii_strings, model_name=state.local_model)
         
-        # 3. Masking (with algorithmic context reduction for file_context)
-        masked_query, vault_query = masking_uc.execute(state.user_query, labeled_entities)
-        masked_context, vault_context = masking_uc.execute(state.file_context, labeled_entities, shorten=True)
+        # Merge with existing entities to maintain recall over multiple turns
+        all_labeled_entities = state.labeled_pii_entities + new_labeled_entities
         
-        # Merge vaults to ensure all tokens are restorable
-        combined_vault = {**vault_context, **vault_query}
+        # 2. Masking
+        masked_query, vault_query = masking_uc.execute(state.user_query, all_labeled_entities)
+        masked_context, vault_context = masking_uc.execute(state.file_context, all_labeled_entities, shorten=True)
+        
+        # Merge vaults
+        combined_vault = {**state.vault, **vault_context, **vault_query}
         
         return {
-            "raw_pii_strings": pii_strings,
-            "labeled_pii_entities": labeled_entities,
+            "raw_pii_strings": list(set(state.raw_pii_strings + pii_strings)),
+            "labeled_pii_entities": all_labeled_entities,
             "masked_query": masked_query,
             "masked_context": masked_context,
-            "vault": combined_vault
+            "vault": combined_vault,
+            "messages": [HumanMessage(content=masked_query)],
+            "detection_debug": detection_logs
         }
 
     async def guardrail_node(state: GraphState) -> Dict[str, Any]:
         """Node for security verification using PromptGuard.
 
         Args:
-            state: Current graph state.
+            state (GraphState): Current conversation state.
 
         Returns:
             Dict[str, Any]: Safety status update.
@@ -91,12 +101,10 @@ def create_privacy_graph(
         return {"is_safe": is_safe}
 
     async def cloud_llm_node(state: GraphState) -> Dict[str, Any]:
-        """Node for external cloud LLM processing (Gemini).
-
-        Uses pseudonymized data to preserve privacy.
+        """Node for external cloud LLM processing.
 
         Args:
-            state: Current graph state.
+            state (GraphState): Current conversation state.
 
         Returns:
             Dict[str, Any]: Cloud LLM response and debug info.
@@ -104,7 +112,8 @@ def create_privacy_graph(
         result = await cloud_uc.execute(
             context=state.masked_context,
             query=state.masked_query,
-            model_name=state.cloud_model
+            model_name=state.cloud_model,
+            history=state.messages
         )
         return {
             "cloud_response": result["answer"],
@@ -113,18 +122,32 @@ def create_privacy_graph(
         }
 
     def sync_node(state: GraphState) -> GraphState:
-        """Synchronous node used to wait for parallel branches."""
+        """Synchronous node used to wait for parallel branches.
+        
+        Args:
+            state (GraphState): Current conversation state.
+            
+        Returns:
+            GraphState: Unchanged state to allow transition.
+        """
         return state
 
     def block_request_node(state: GraphState) -> Dict[str, Any]:
-        """Node invoked when a request is blocked by guardrails."""
+        """Node invoked when a request is blocked by guardrails.
+
+        Args:
+            state (GraphState): Current conversation state.
+
+        Returns:
+            Dict[str, Any]: Blocking message.
+        """
         return {"final_output": "🛑 SECURITY ERROR: Request blocked by Guardrail Agent."}
 
     async def re_identification_node(state: GraphState) -> Dict[str, Any]:
         """Node for restoring original PII values in the final response.
 
         Args:
-            state: Current graph state.
+            state (GraphState): Current conversation state.
 
         Returns:
             Dict[str, Any]: Final de-identified output.
@@ -132,7 +155,10 @@ def create_privacy_graph(
         result = state.cloud_response
         for token, original in state.vault.items():
             result = result.replace(token, original)
-        return {"final_output": result}
+        return {
+            "final_output": result,
+            "messages": [AIMessage(content=result)]
+        }
 
     # --- GRAPH CONSTRUCTION ---
 
@@ -163,4 +189,6 @@ def create_privacy_graph(
     workflow.add_edge("re_identification", END)
     workflow.add_edge("block_request", END)
 
-    return workflow.compile()
+    # Checkpointing for memory support
+    memory = MemorySaver()
+    return workflow.compile(checkpointer=memory)

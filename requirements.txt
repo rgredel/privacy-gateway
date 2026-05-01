@@ -16,11 +16,13 @@ langchain-experimental
 faker
 python-stdnum
 
+# Document Processing & OCR (Out-of-the-box Markdown)
+pymupdf4llm
+
 # Evaluation & Experiments
 bert-score
 nervaluate
 sentence-transformers
-pandas
 matplotlib
 guardrails-ai
 

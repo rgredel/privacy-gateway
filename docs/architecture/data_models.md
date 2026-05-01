@@ -58,3 +58,18 @@ Configurations are managed via `src/app/core/config.py` using Pydantic `BaseSett
 - **Local Model:** Default `bielik-1.5b`.
 - **Cloud Model:** Default `gemini-2.0-flash`.
 - **Security Thresholds:** Sensitivity levels for PromptGuard (default `0.85`).
+
+## PII Detection Entities
+
+### RecognizedEntity
+Represents a candidate PII found by a base engine.
+- `value`: The raw string value.
+- `label`: The entity type (PERSON, LOCATION, etc.).
+- `score`: Confidence score (0.0 - 1.0).
+- `recognizer`: Name of the engine/model that found it.
+
+### AdjudicationResult
+Structured verdict from the LLM judge.
+- `is_pii`: Boolean verdict.
+- `reasoning`: Chain-of-Thought explanation.
+- `corrected_value`: Optional fixed value.
