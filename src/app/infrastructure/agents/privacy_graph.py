@@ -74,6 +74,9 @@ def create_privacy_graph(
         # Merge vaults
         combined_vault = {**state.vault, **vault_context, **vault_query}
         
+        print(f"[DEBUG: GRAPH] PII detection finished. Found {len(pii_strings)} new entities.")
+        print(f"[DEBUG: GRAPH] Masked Query: {masked_query[:50]}...")
+        
         return {
             "raw_pii_strings": list(set(state.raw_pii_strings + pii_strings)),
             "labeled_pii_entities": all_labeled_entities,
@@ -101,20 +104,15 @@ def create_privacy_graph(
         return {"is_safe": is_safe}
 
     async def cloud_llm_node(state: GraphState) -> Dict[str, Any]:
-        """Node for external cloud LLM processing.
-
-        Args:
-            state (GraphState): Current conversation state.
-
-        Returns:
-            Dict[str, Any]: Cloud LLM response and debug info.
-        """
+        """Node for external cloud LLM processing."""
+        print(f"[DEBUG: GRAPH] Entering Cloud LLM Node with model: {state.cloud_model}")
         result = await cloud_uc.execute(
             context=state.masked_context,
             query=state.masked_query,
             model_name=state.cloud_model,
             history=state.messages
         )
+        print(f"[DEBUG: GRAPH] Cloud LLM Response received (len: {len(result['answer'])})")
         return {
             "cloud_response": result["answer"],
             "cloud_query_debug": result["debug_prompt"],

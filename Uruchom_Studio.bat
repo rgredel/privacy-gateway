@@ -1,20 +1,23 @@
 @echo off
-chcp 65001 > nul
+setlocal
+cd /d %~dp0
 set PYTHONIOENCODING=utf-8
-title LangGraph Studio API Server
+title Privacy Gateway - LangGraph Studio
 color 0d
 
 echo ========================================================
 echo        URUCHAMIANIE LANGGRAPH STUDIO API                
 echo ========================================================
-echo Tworzymy serwer dev dla interfejsu graficznego grafów...
-echo Uzywane jest to samo zamkniete srodowisko (Python 3.12).
+echo Tworzymy serwer dev dla interfejsu graficznego grafow...
+echo Srodowisko: .venv (Python 3.12)
 echo ========================================================
 
-:: Aktywacja wirtualnego srodowiska
-call .venv\Scripts\activate.bat
+if not exist ".venv\Scripts\langgraph.exe" (
+    echo [BLAD] Nie znaleziono langgraph.exe w .venv\Scripts!
+    pause
+    exit /b
+)
 
-:: Uruchomienie serwera Studio, ktore automatycznie utworzy tunel i okno ze specyfikacja
-langgraph dev
+".venv\Scripts\langgraph.exe" dev
 
 pause

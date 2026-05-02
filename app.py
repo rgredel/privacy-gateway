@@ -1,6 +1,11 @@
 import asyncio
 import uuid
+import logging
 import chainlit as cl
+
+# Silence aggressive httpx polling logs from Replicate/LangChain
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
 from src.app.main import graph as app_graph
 from src.app.utils.file_handler import process_uploaded_file
 from chainlit.input_widget import Switch, Select, Slider
@@ -29,14 +34,23 @@ async def on_chat_start():
         ),
         Select(
             id="local_model", 
-            label="Model Przetwarzania PII (Lokalny lub Chmurowy)", 
-            values=["qooba/bielik-1.5b-v3.0-instruct:Q8_0", "llama3.2", "phi3", "gemini-2.5-flash", "gemini-1.5-pro"], 
-            initial_value="qooba/bielik-1.5b-v3.0-instruct:Q8_0"
+            label="Model Przetwarzania PII (Sędzia)", 
+            values=[
+                "aleksanderobuchowski/bielik-11b-v2.3-instruct:dc287cda645e8f80c83ccb1b01c8c8fe8d652b4040c073e3c75112f20f983a2a",
+                "qooba/bielik-1.5b-v3.0-instruct:Q8_0", 
+                "gemini-2.5-flash", 
+                "llama3.2"
+            ], 
+            initial_value="aleksanderobuchowski/bielik-11b-v2.3-instruct:dc287cda645e8f80c83ccb1b01c8c8fe8d652b4040c073e3c75112f20f983a2a"
         ),
         Select(
             id="cloud_model", 
             label="Model Chmurowy (GenAI)", 
-            values=["gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-pro"], 
+            values=[
+                "gemini-2.5-flash",
+                "aleksanderobuchowski/bielik-11b-v2.3-instruct:dc287cda645e8f80c83ccb1b01c8c8fe8d652b4040c073e3c75112f20f983a2a",
+                "gemini-1.5-pro"
+            ], 
             initial_value="gemini-2.5-flash"
         ),
         Switch(id="show_debug", label="Pokaż logi zabezpieczeń", initial=True)
@@ -90,7 +104,9 @@ async def on_message(message: cl.Message):
     # 2. Prepare initial state for the graph
     settings = cl.user_session.get("settings")
     
-    # Pamięć rozmowy: wiadomości są teraz zarządzane przez węzły grafu (PrivacyWrapper i Re-id)
+    # Defaults to Bielik 11B
+    bielik_v2_3 = "aleksanderobuchowski/bielik-11b-v2.3-instruct:dc287cda645e8f80c83ccb1b01c8c8fe8d652b4040c073e3c75112f20f983a2a"
+    
     initial_state = GraphState(
         file_context=xml_input,
         user_query=message.content,
@@ -98,7 +114,7 @@ async def on_message(message: cl.Message):
         guardrail_threshold=settings.get("guardrail_threshold", 0.85),
         detection_mode=settings.get("detection_mode", "ner-only"),
         cloud_model=settings.get("cloud_model", "gemini-2.5-flash"),
-        local_model=settings.get("local_model", "qooba/bielik-1.5b-v3.0-instruct:Q8_0"),
+        local_model=settings.get("local_model", bielik_v2_3),
         show_debug=settings.get("show_debug", True)
     )
     
@@ -108,45 +124,56 @@ async def on_message(message: cl.Message):
     await msg.send()
     
     # 3. Invoke the Privacy Graph
-    final_state_dict = await app_graph.ainvoke(initial_state, config=config)
-    final_state = GraphState(**final_state_dict) if isinstance(final_state_dict, dict) else final_state_dict
-    
-    final_output = final_state.final_output
-    detected_pii = final_state.vault
-    masked_query = final_state.masked_query
-    
-    # 4. Build debug interface
-    debug_info = ""
-    if settings.get("show_debug"):
-        debug_info += "\n\n---\n**⚙️ System Logs (Debug):**\n"
+    try:
+        final_state_dict = await app_graph.ainvoke(initial_state, config=config)
         
-        detected_pii_str = ", ".join(final_state.raw_pii_strings) if final_state.raw_pii_strings else "(No PII detected)"
-        debug_info += f"- **PII Vault:** `{detected_pii_str}`\n"
-        debug_info += f"- **Masked Query:**\n> `{masked_query}`\n"
+        # Pydantic v2 recommendation: use model_validate for dicts
+        if isinstance(final_state_dict, dict):
+            final_state = GraphState.model_validate(final_state_dict)
+        else:
+            final_state = final_state_dict
         
-        if final_state.masked_context:
-            context_snippet = final_state.masked_context[:200] + "..." if len(final_state.masked_context) > 200 else final_state.masked_context
-            debug_info += f"- **Masked Context (Files):**\n```\n{context_snippet}\n```\n"
+        final_output = final_state.final_output or "⚠️ Warning: The model returned an empty response."
+        
+        # 4. Build debug interface
+        debug_info = ""
+        if settings.get("show_debug"):
+            debug_info += "\n\n---\n**⚙️ System Logs (Debug):**\n"
+            
+            detected_pii_str = ", ".join(final_state.raw_pii_strings) if final_state.raw_pii_strings else "(No PII detected)"
+            debug_info += f"- **PII Vault:** `{detected_pii_str}`\n"
+            debug_info += f"- **Masked Query:**\n> `{final_state.masked_query}`\n"
+            
+            if final_state.masked_context:
+                context_snippet = final_state.masked_context[:200] + "..." if len(final_state.masked_context) > 200 else final_state.masked_context
+                debug_info += f"- **Masked Context (Files):**\n```\n{context_snippet}\n```\n"
 
-        # Show detection pipeline steps
-        if final_state.detection_debug:
-            debug_info += "\n**🔍 Detection Pipeline Details:**\n"
-            for log in final_state.detection_debug:
-                debug_info += f"- {log}\n"
+            # Show detection pipeline steps
+            if final_state.detection_debug:
+                debug_info += "\n**🔍 Detection Pipeline Details:**\n"
+                for log in final_state.detection_debug:
+                    debug_info += f"- {log}\n"
 
-        # Show cloud LLM prompt details
-        cloud_debug = final_state.cloud_query_debug or "No data available"
-        debug_info += f"\n**☁️ Cloud LLM View (Gemini):**\n```\n{cloud_debug}\n```"
+            # Show cloud LLM prompt details
+            cloud_debug = final_state.cloud_query_debug or "No data available"
+            debug_info += f"\n**☁️ Cloud LLM View ({final_state.cloud_model}):**\n```\n{cloud_debug}\n```"
+            
+            # PII Leak Warnings
+            privacy_warnings = final_state.privacy_warnings
+            if privacy_warnings:
+                debug_info += "\n**🛑 Data Leakage Warnings (Anti-Leakage):**\n"
+                for warn in privacy_warnings:
+                    debug_info += f"- {warn}\n"
+            
+            if final_state.is_safe is False:
+                debug_info += "\n**🛑 BLOCKED:** Prompt Injection attack intercepted by Guardrail Agent."
+            
+        msg.content = final_output + debug_info
+        await msg.update()
         
-        # PII Leak Warnings
-        privacy_warnings = final_state.privacy_warnings
-        if privacy_warnings:
-            debug_info += "\n**🛑 Data Leakage Warnings (Anti-Leakage):**\n"
-            for warn in privacy_warnings:
-                debug_info += f"- {warn}\n"
-        
-        if final_state.is_safe is False:
-            debug_info += "\n**🛑 BLOCKED:** Prompt Injection attack intercepted by Guardrail Agent."
-        
-    msg.content = final_output + debug_info
-    await msg.update()
+    except Exception as e:
+        print(f"[ERROR: APP] {e}")
+        import traceback
+        traceback.print_exc()
+        msg.content = f"❌ **Error during processing:** {str(e)}"
+        await msg.update()

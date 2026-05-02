@@ -7,6 +7,9 @@ chainlit
 pydantic
 pydantic-settings
 python-dotenv
+replicate>=1.0.0
+langchain-community
+tenacity
 
 # PII Detection (Presidio + spaCy)
 presidio-analyzer[transformers]

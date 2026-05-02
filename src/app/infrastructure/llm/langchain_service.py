@@ -1,6 +1,10 @@
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Type, TypeVar
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
-from langchain_core.prompts import PromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.output_parsers import PydanticOutputParser
+from pydantic import BaseModel
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from src.app.domain.ports import ILLMService
 from src.app.domain.entities import PIIData, PIIEntity, LabelingData, RecognizedEntity, MultiAdjudicationResult
@@ -13,152 +17,143 @@ from src.app.infrastructure.llm.prompts import (
     JUDGE_BATCH_PROMPT
 )
 
+T = TypeVar("T", bound=BaseModel)
+
+# Robust retry configuration for rate-limited providers like Replicate
+# (Wait 2^x * 2s between attempts, stop after 3 attempts)
+replicate_retry = retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=2, min=2, max=10),
+    # We use a broad Exception here but could narrow it down to ReplicateError if needed
+    reraise=True
+)
+
 class LangChainService(ILLMService):
-    """Implementation of the LLM service using LangChain and multiple model providers.
+    """Generic implementation of the LLM service using LangChain.
     
-    This service handles PII detection, adjudication, labeling, and response generation
-    by orchestrating calls to local (Ollama) or cloud (Gemini) models.
+    Handles multi-provider routing and provides a standardized way to extract
+    structured data, with an automatic fallback and retry mechanism for 
+    rate-limited or non-native models.
     """
     
     def __init__(self) -> None:
-        """Initializes the service. Models are dynamically selected per request via a factory."""
+        """Initializes the service with a dynamic model factory."""
         from src.app.infrastructure.llm.factory import get_model
         self.get_model = get_model
 
-    async def analyze_pii(self, text: str, model_name: str, candidates: Optional[List[str]] = None) -> List[str]:
-        """Identifies PII strings in text using a structured LLM prompt.
-        
-        Args:
-            text (str): Input text for analysis.
-            model_name (str): Identifier of the LLM to use.
-            candidates (Optional[List[str]]): NER-found candidates to help the LLM.
+    def _get_structured_chain(self, llm: Any, pydantic_class: Type[T], prompt_template: Any) -> Any:
+        """Generic helper to create a structured output chain."""
+        try:
+            # 1. Try native provider support (Gemini, Ollama)
+            return prompt_template | llm.with_structured_output(pydantic_class)
+        except (NotImplementedError, AttributeError):
+            # 2. Generic Fallback (Replicate, legacy models)
+            from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
+            parser = PydanticOutputParser(pydantic_object=pydantic_class)
+            format_instructions = parser.get_format_instructions().replace("{", "{{").replace("}", "}}")
             
-        Returns:
-            List[str]: A list of verified PII strings.
-        """
+            if isinstance(prompt_template, ChatPromptTemplate):
+                messages = []
+                for m in prompt_template.messages:
+                    if isinstance(m, tuple) and m[0] == "human":
+                        messages.append(("human", m[1] + "\n\n" + format_instructions))
+                    elif hasattr(m, "content") and m.__class__.__name__ == "HumanMessage":
+                        messages.append(("human", m.content + "\n\n" + format_instructions))
+                    else:
+                        messages.append(m)
+                new_prompt = ChatPromptTemplate.from_messages(messages)
+            elif isinstance(prompt_template, PromptTemplate):
+                new_prompt = PromptTemplate.from_template(prompt_template.template + "\n\n" + format_instructions)
+            else:
+                new_prompt = PromptTemplate.from_template(str(prompt_template) + "\n\n" + format_instructions)
+                
+            return new_prompt | llm | parser
+
+    @replicate_retry
+    async def analyze_pii(self, text: str, model_name: str, candidates: Optional[List[str]] = None) -> List[str]:
+        """Identifies PII strings in text. Uses retries for rate-limited models."""
         llm = self.get_model(model_name=model_name, temperature=0.0)
-        structured_llm = llm.with_structured_output(PIIData)
         
         if candidates is not None:
-            # Hybrid Mode
-            chain = DETECTION_PROMPT_HYBRID | structured_llm
-            result: PIIData = await chain.ainvoke({
-                "text": text,
-                "candidates": ", ".join(candidates) if candidates else "None"
-            })
+            prompt_template = DETECTION_PROMPT_HYBRID
+            input_data = {"text": text, "candidates": ", ".join(candidates) if candidates else "None"}
         else:
-            # LLM-only Mode
-            prompt = (
-                DETECTION_SYSTEM_LLM_ONLY + "\n\n" +
-                "TEXT TO ANALYZE: {text}"
-            )
-            chain = PromptTemplate.from_template(prompt) | structured_llm
-            result: PIIData = await chain.ainvoke({"text": text})
+            prompt_template = PromptTemplate.from_template(DETECTION_SYSTEM_LLM_ONLY + "\n\nTEXT TO ANALYZE: {text}")
+            input_data = {"text": text}
             
+        chain = self._get_structured_chain(llm, PIIData, prompt_template)
+        result: PIIData = await chain.ainvoke(input_data)
         return result.detected_strings if result else []
 
+    @replicate_retry
     async def adjudicate_entities(self, text: str, entities: List[RecognizedEntity], model_name: str) -> tuple[List[str], Dict[str, str]]:
-        """Performs semantic adjudication on multiple NER entities in a single batch.
-        
-        Args:
-            text (str): The full context text.
-            entities (List[RecognizedEntity]): Candidate entities from NER engines.
-            model_name (str): Identifier of the LLM to use.
-            
-        Returns:
-            tuple[List[str], Dict[str, str]]: (List of approved PII strings, mapping of value to reasoning).
-        """
-        if not entities:
-            return [], {}
-            
+        """Performs semantic adjudication. Uses retries for rate-limited models."""
+        if not entities: return [], {}
         llm = self.get_model(model_name=model_name, temperature=0.0)
-        structured_llm = llm.with_structured_output(MultiAdjudicationResult)
+        candidates_str = "\n".join([f"- {e.value} (Type: {e.label})" for e in entities])
         
-        # Format candidates for the batch prompt
-        candidates_list = [f"- {e.value} (Type: {e.label})" for e in entities]
-        candidates_str = "\n".join(candidates_list)
+        # We use a custom parser approach for better robustness with Bielik/Replicate
+        from langchain_core.output_parsers import PydanticOutputParser
+        parser = PydanticOutputParser(pydantic_object=MultiAdjudicationResult)
         
-        chain = JUDGE_BATCH_PROMPT | structured_llm
+        prompt = JUDGE_BATCH_PROMPT.format(text=text, candidates=candidates_str)
         
         try:
-            result: MultiAdjudicationResult = await chain.ainvoke({
-                "text": text,
-                "candidates": candidates_str
-            })
+            # Get raw response first to allow for manual cleaning if needed
+            raw_response = await llm.ainvoke(prompt)
+            content = str(raw_response.content if hasattr(raw_response, 'content') else raw_response)
             
-            verified_strings = [v.original_value for v in result.verdicts if v.is_pii]
-            reasoning_map = {v.original_value: v.reasoning for v in result.verdicts}
+            # Clean markdown code blocks if present (common in Cloud LLMs)
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0].strip()
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0].strip()
             
-            return verified_strings, reasoning_map
+            # Attempt to parse using the standard LangChain parser
+            result = parser.parse(content)
+            
+            return [v.original_value for v in result.verdicts if v.is_pii], {v.original_value: v.reasoning for v in result.verdicts}
+            
         except Exception as e:
-            print(f"[ERROR: ADJUDICATION] Batch processing failed: {e}")
-            # Fallback: assume all are PII if the judge fails
+            if "429" in str(e) or "throttled" in str(e).lower():
+                raise e
+            print(f"[ERROR: ADJUDICATION] Failed to process {model_name}: {e}")
+            # Fallback: assume everything is PII to be safe
             return [e.value for e in entities], {"error": str(e)}
 
+    @replicate_retry
     async def label_pii(self, pii_strings: List[str], model_name: str) -> List[PIIEntity]:
-        """Classifies verified PII strings into specific domain categories.
-        
-        Args:
-            pii_strings (List[str]): Verified PII values.
-            model_name (str): Identifier of the LLM to use.
-            
-        Returns:
-            List[PIIEntity]: A list of structured PII entities.
-        """
-        if not pii_strings:
-            return []
-            
+        """Classifies PII strings. Uses retries for rate-limited models."""
+        if not pii_strings: return []
         llm = self.get_model(model_name=model_name, temperature=0.0)
-        structured_llm = llm.with_structured_output(LabelingData)
-        
-        chain = LABELING_PROMPT | structured_llm
-        
+        chain = self._get_structured_chain(llm, LabelingData, LABELING_PROMPT)
         result: LabelingData = await chain.ainvoke({
-            "context": "Context not provided for labeling",
+            "context": "PII Labeling Context",
             "pii_list": ", ".join(pii_strings)
         })
         return result.entities if result else []
 
-    async def verify_security(self, query: str, threshold: float) -> bool:
-        """Deprecated: Security is now handled by PromptGuardService.
-        
-        Maintained for interface compatibility.
-        """
-        return True
+    async def verify_security(self, query: str, threshold: float) -> bool: return True
 
+    @replicate_retry
     async def generate_response(self, context: str, query: str, model_name: str, history: Optional[List[Any]] = None) -> Dict[str, Any]:
-        """Generates a final response based on sanitized context and user query.
-        
-        Args:
-            context (str): Masked background context.
-            query (str): Masked user query.
-            model_name (str): Identifier of the cloud LLM to use.
-            history (Optional[List[Any]]): Conversation history messages.
-            
-        Returns:
-            Dict[str, Any]: Contains 'answer', 'debug_prompt', and 'warnings'.
-        """
+        """Generates a final response. Uses retries for rate-limited models."""
         llm = self.get_model(model_name=model_name, temperature=0.2)
-        
-        system_prompt = CLOUD_SYSTEM_PROMPT
-        user_prompt = CLOUD_USER_PROMPT.format(context=context, query=query)
-        
         messages = [
-            SystemMessage(content=system_prompt),
+            SystemMessage(content=CLOUD_SYSTEM_PROMPT),
             *(history if history else []),
-            HumanMessage(content=user_prompt)
+            HumanMessage(content=CLOUD_USER_PROMPT.format(context=context, query=query))
         ]
         
-        response = await llm.ainvoke(messages)
-        content = str(response.content)
-        
-        # Simple anti-leakage heuristic check
-        warnings = []
-        if "[BŁĄD BEZPIECZEŃSTWA]" in content:
-            warnings.append("Cloud model blocked the response due to suspected prompt injection.")
+        if isinstance(llm, BaseChatModel):
+            response = await llm.ainvoke(messages)
+            content = str(response.content)
+        else:
+            prompt = "\n".join([f"{m.type}: {m.content}" for m in messages])
+            content = str(await llm.ainvoke(prompt))
             
         return {
-            "answer": content,
-            "debug_prompt": f"System: {system_prompt}\nUser: {user_prompt}",
-            "warnings": warnings
+            "answer": content, 
+            "debug_prompt": f"System: {CLOUD_SYSTEM_PROMPT[:100]}...\nUser: {CLOUD_USER_PROMPT.format(context='...', query=query)}", 
+            "warnings": []
         }

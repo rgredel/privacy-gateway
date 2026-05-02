@@ -44,19 +44,38 @@ JUDGE_PROMPT = ChatPromptTemplate.from_messages([
 
 JUDGE_BATCH_PROMPT = ChatPromptTemplate.from_messages([
     ("system", (
-        "Jesteś Sędzią PII (LLM-as-a-judge). Otrzymasz tekst oraz listę potencjalnych fragmentów PII znalezionych przez silnik NER.\n"
-        "Twoim zadaniem jest rozstrzygnięcie dla KAŻDEGO fragmentu, czy w danym kontekście stanowi on daną osobową (PII).\n\n"
-        "ZASADY ADJUDYKACJI:\n"
-        "1. PERSON: Akceptuj imiona i nazwiska osób fizycznych. Odrzucaj postacie historyczne/fikcyjne.\n"
-        "2. LOCATION: Akceptuj adresy i miasta tylko jeśli wskazują na miejsce zamieszkania/pobytu osoby. Odrzucaj ogólne nazwy geograficzne.\n"
-        "3. ORGANIZATION: Akceptuj firmy jednoosobowe (JDG) i małe biura. Odrzucaj wielkie korporacje (np. Google, Orlen) i urzędy.\n"
-        "4. ID_NUMBER: Akceptuj numery identyfikacyjne (PESEL/NIP) tylko jeśli kontekst sugeruje dane klienta/pracownika.\n\n"
-        "ZASADA Chain-of-Thought:\n"
-        "W polu 'thought' krótko przeanalizuj cały tekst. Następnie w polu 'verdicts' zwróć werdykt dla każdego elementu z listy.\n"
-        "BARDZO WAŻNE: W polu 'original_value' musisz podać DOKŁADNIE taką samą frazę, jaką otrzymałeś na liście kandydatów (zachowaj wielkość liter i interpunkcję).\n"
-        "ZWRÓĆ JSON ZGODNY ZE STRUKTURĄ MultiAdjudicationResult."
+        "Jesteś Sędzią PII (LLM-as-a-judge). Twoim zadaniem jest adjudykacja fragmentów tekstu pod kątem ochrony danych osobowych.\n"
+        "ANALIZUJ KONTEKST: Rozróżniaj dane osób fizycznych od danych historycznych lub dużych firm.\n\n"
+        "ZASADY:\n"
+        "1. PERSON: Tylko osoby fizyczne. Odrzucaj postacie historyczne.\n"
+        "2. LOCATION: Tylko adresy zamieszkania/pobytu. Odrzucaj ogólne nazwy geograficzne.\n"
+        "3. ORGANIZATION: Tylko firmy jednoosobowe (JDG). Odrzucaj korporacje i urzędy.\n"
+        "4. ID_NUMBER: Tylko PESEL/NIP/REGON osób fizycznych/JDG.\n\n"
+        "BARDZO WAŻNE: Odpowiedz WYŁĄCZNIE czystym obiektem JSON. Nie dodawaj żadnych wstępów ani komentarzy poza strukturą JSON."
     )),
-    ("human", "TEKST DO ANALIZY:\n{text}\n\nLISTA KANDYDATÓW DO ROZSTRZYGNIĘCIA (zachowaj te wartości w 'original_value'):\n{candidates}\n\nPRZEPROWADŹ ZBIORCZĄ ADJUDYKACJĘ:")
+    ("human", (
+        "TEKST DO ANALIZY:\n"
+        "Jan Nowak (PESEL: 12345678901) kupił książkę o Mikołaju Koperniku w księgarni Orlen.\n\n"
+        "LISTA KANDYDATÓW:\n"
+        "- Jan Nowak (Type: PERSON)\n"
+        "- 12345678901 (Type: PL_PESEL)\n"
+        "- Mikołaju Koperniku (Type: PERSON)\n"
+        "- Orlen (Type: ORGANIZATION)\n\n"
+        "PRZYKŁAD POPRAWNEJ ODPOWIEDZI (JSON):\n"
+        "{{\n"
+        "  \"thought\": \"Jan Nowak to klient (PII). PESEL jest daną wrażliwą (PII). Kopernik to postać historyczna (nie-PII). Orlen to duża korporacja (nie-PII).\",\n"
+        "  \"verdicts\": [\n"
+        "    {{\"original_value\": \"Jan Nowak\", \"is_pii\": true, \"reasoning\": \"Klient banku/osoba fizyczna\"}},\n"
+        "    {{\"original_value\": \"12345678901\", \"is_pii\": true, \"reasoning\": \"PESEL osoby fizycznej\"}},\n"
+        "    {{\"original_value\": \"Mikołaju Koperniku\", \"is_pii\": false, \"reasoning\": \"Postać historyczna\"}},\n"
+        "    {{\"original_value\": \"Orlen\", \"is_pii\": false, \"reasoning\": \"Duża korporacja\"}}\n"
+        "  ]\n"
+        "}}\n\n"
+        "--- ZADANIE DLA CIEBIE ---\n"
+        "TEKST: {text}\n"
+        "KANDYDACI:\n{candidates}\n\n"
+        "ZWRÓĆ TYLKO JSON:"
+    ))
 ])
 
 LABELING_PROMPT = PromptTemplate.from_template(

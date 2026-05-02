@@ -1,5 +1,5 @@
 from typing import Annotated, Dict, List, Optional, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from langgraph.graph.message import add_messages
 
 class PIIEntity(BaseModel):
@@ -9,6 +9,7 @@ class PIIEntity(BaseModel):
         value (str): The original PII string found in text.
         label (str): The category of the PII (e.g., PERSON, EMAIL, PESEL).
     """
+    model_config = ConfigDict(from_attributes=True)
     value: str = Field(description="Original PII value")
     label: str = Field(description="Entity label/category")
 
@@ -82,6 +83,11 @@ class GraphState(BaseModel):
         cloud_model: Identifier of the selected cloud LLM model.
         local_model: Identifier of the selected local LLM model.
     """
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        from_attributes=True,
+        populate_by_name=True
+    )
     messages: Annotated[list, add_messages] = Field(default_factory=list)
     file_context: str = Field(default="", description="Input file content for RAG context")
     user_query: str = Field(default="", description="Original user query")
@@ -103,8 +109,5 @@ class GraphState(BaseModel):
     cloud_query_debug: str = Field(default="")
     detection_debug: List[str] = Field(default_factory=list, description="Detailed logs from the detection pipeline")
     privacy_warnings: List[str] = Field(default_factory=list)
-    cloud_model: str = Field(default="gemini-2.0-flash")
+    cloud_model: str = Field(default="gemini-2.5-flash")
     local_model: str = Field(default="bielik-1.5b")
-
-    class Config:
-        arbitrary_types_allowed = True

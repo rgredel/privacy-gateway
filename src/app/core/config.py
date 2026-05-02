@@ -11,6 +11,7 @@ class Settings(BaseSettings):
 
     # API Keys
     google_api_key: str = os.getenv("GOOGLE_API_KEY", "")
+    replicate_api_token: Optional[str] = os.getenv("REPLICATE_API_TOKEN")
     hf_token: Optional[str] = os.getenv("HF_TOKEN")
 
     # LangChain / LangGraph

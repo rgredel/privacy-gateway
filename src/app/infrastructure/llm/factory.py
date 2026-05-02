@@ -1,7 +1,8 @@
 import os
-from typing import Any, Optional
+from typing import Any, Optional, List
 from langchain_ollama import ChatOllama
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_community.llms import Replicate
 from src.app.core.config import settings
 
 def get_local_model(model_name: Optional[str] = None, temperature: float = 0.0, format: Optional[str] = None) -> ChatOllama:
@@ -45,8 +46,62 @@ def get_cloud_gemini_2_5_flash(temperature: float = 0.0, model_name: Optional[st
         google_api_key=settings.google_api_key
     )
 
+class ReplicateBielik(Replicate):
+    """Custom adapter for Bielik models on Replicate that require 'input' key instead of 'prompt'."""
+    def _create_prediction(self, prompt: str, **kwargs: Any) -> Any:
+        import replicate as replicate_python
+        
+        # Merge all inputs. Bielik 11B expects the prompt in the 'input' field.
+        all_inputs = {
+            "input": prompt,
+            **self.model_kwargs,
+            **kwargs
+        }
+        
+        # Extract version hash from owner/model:hash string
+        version_str = self.model.split(":")[1] if ":" in self.model else None
+        
+        # Ensure we use the correct token for this specific call
+        client = replicate_python.Client(api_token=self.replicate_api_token)
+        
+        print(f"[DEBUG: REPLICATE] Starting prediction for {self.model}...")
+        # Create prediction - this returns immediately, LangChain will call .wait() later
+        return client.predictions.create(
+            version=version_str,
+            input=all_inputs
+        )
+
+def get_replicate_model(model_name: str, temperature: float = 0.0, **kwargs: Any) -> Replicate:
+    """Returns an LLM instance hosted on Replicate.
+    
+    Args:
+        model_name (str): The identifier of the Replicate model (owner/model).
+        temperature (float): Sampling temperature.
+        **kwargs: Additional parameters passed to the model.
+        
+    Returns:
+        Replicate: An initialized Replicate LLM instance.
+    """
+    if not settings.replicate_api_token or "your_token_here" in settings.replicate_api_token:
+        raise ValueError("REPLICATE_API_TOKEN is missing or not configured in .env file.")
+    
+    # Replicate Bielik 11B requires the prompt to be in the "input" field
+    # and temperature >= 0.01. It also uses "max_length" instead of max_new_tokens.
+    safe_temp = max(0.01, temperature)
+    
+    return ReplicateBielik(
+        model=model_name,
+        model_kwargs={
+            "temperature": safe_temp,
+            "max_length": kwargs.get("max_tokens", 1024),
+            "repetition_penalty": 1.1,
+            **kwargs
+        },
+        replicate_api_token=settings.replicate_api_token
+    )
+
 def get_model(model_name: str, temperature: float = 0.0, **kwargs: Any) -> Any:
-    """Dynamic factory that routes to either Ollama or Gemini based on the model name.
+    """Dynamic factory that routes to either Ollama, Gemini, or Replicate based on the model name.
     
     This function acts as a central router for dynamic model selection in the infrastructure.
     
@@ -56,10 +111,13 @@ def get_model(model_name: str, temperature: float = 0.0, **kwargs: Any) -> Any:
         **kwargs: Additional arguments passed to the specific model constructor.
         
     Returns:
-        Any: A LangChain-compatible LLM instance (ChatOllama or ChatGoogleGenerativeAI).
+        Any: A LangChain-compatible LLM instance.
     """
     if "gemini" in model_name.lower():
         return get_cloud_gemini_2_5_flash(model_name=model_name, temperature=temperature, **kwargs)
+    elif "/" in model_name and not model_name.startswith("http"):
+        # Pattern owner/model typically indicates a Replicate model
+        return get_replicate_model(model_name=model_name, temperature=temperature, **kwargs)
     else:
         return get_local_model(model_name=model_name, temperature=temperature, **kwargs)
 

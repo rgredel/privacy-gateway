@@ -1,21 +1,22 @@
 @echo off
-chcp 65001 > nul
-title Uruchamianie Privacy Gateway (Chainlit w Python 3.12)
+setlocal
+cd /d %~dp0
+title Privacy Gateway - Bielik 11B
 color 0b
 
 echo ========================================================
 echo        URUCHAMIANIE SERWERA UI (CHAINLIT)               
 echo ========================================================
-echo Pomyślnie użyto stabilnego środowiska Python 3.12!
-echo Ominięto błędy kompatybilności wersji eksperymentalnych.
-echo Przeglądarka powinna otworzyć się za chwilę automatycznie.
-echo Jeśli tak się nie stanie, wejdź na: http://localhost:8000
+echo Model domyslny: Bielik 11B v2.3 (Replicate)
+echo Srodowisko: .venv (Python 3.12)
 echo ========================================================
 
-:: Aktywacja dedykowanego środowiska, zainstalowanego w locie
-call .venv\Scripts\activate.bat
+if not exist ".venv\Scripts\python.exe" (
+    echo [BLAD] Nie znaleziono srodowiska wirtualnego w katalogu .venv!
+    pause
+    exit /b
+)
 
-:: Uruchomienie bezpiecznego środowiska po "sprzątaniu"
-chainlit run app.py -w
+".venv\Scripts\python.exe" -m chainlit run app.py -w
 
 pause
