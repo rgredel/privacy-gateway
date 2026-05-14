@@ -10,7 +10,16 @@ Uruchomienie:
 import csv
 import subprocess
 import sys
+import logging
 from pathlib import Path
+
+# Konfiguracja logowania dla diagnostyki LLM
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(message)s',
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+logger = logging.getLogger(__name__)
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 sys.stderr.reconfigure(encoding="utf-8", errors="replace")
@@ -116,20 +125,20 @@ def generate_report(statuses: dict[str, bool]):
     # ── E2 ────────────────────────────────────────────────────────────────
     lines.append("## Eksperyment 2 – Utility Score")
     lines.append("")
-    e2_data = read_csv(RESULTS_DIR / "results_e2.csv")
+    e2_data = read_csv(RESULTS_DIR / "results_e2_comparison.csv")
     if e2_data:
-        lines.append("| Doc ID | PII Count | BERTScore F1 | Degradacja % | Entropy Loss % |")
-        lines.append("|--------|----------:|-------------:|-------------:|---------------:|")
+        lines.append("| Doc ID | Kategoria | F1 Generic | F1 Semantic | F1 Native | Poprawa (Sem) |")
+        lines.append("|--------|-----------|-----------:|------------:|----------:|--------------:|")
         for r in e2_data:
             lines.append(
-                f"| {r['doc_id']} | {r['pii_count']} | {r['bert_f1']} | "
-                f"{r['bert_degradation_pct']}% | {r['entropy_loss_pct']}% |"
+                f"| {r['doc_id']} | {r['category']} | {r['f1_generic']} | "
+                f"{r['f1_semantic']} | {r['f1_native']} | {r['improvement_sem']}% |"
             )
         # Średnie
-        avg_deg = sum(float(r["bert_degradation_pct"]) for r in e2_data) / len(e2_data)
-        status = "✅ PASS" if avg_deg < 15 else "❌ FAIL"
+        avg_sem = sum(float(r["f1_semantic"]) for r in e2_data) / len(e2_data)
+        avg_gen = sum(float(r["f1_generic"]) for r in e2_data) / len(e2_data)
         lines.append("")
-        lines.append(f"**Średnia degradacja BERTScore: {avg_deg:.2f}%** → {status} (próg < 15%)")
+        lines.append(f"**Średni BERTScore (Semantic): {avg_sem:.4f}** (Poprawa względem Generic: {avg_sem - avg_gen:+.4f})")
     else:
         lines.append("*Brak wyników – E2 nie został uruchomiony.*")
     lines.append("")

@@ -241,7 +241,7 @@ SAFE_PAYLOADS = [
 
 def run_guardrail(query: str) -> bool:
     """Zwraca True jeśli guardrail uznał zapytanie za bezpieczne."""
-    from agents.guardrail import guardrail_agent
+    from src.app.infrastructure.agents.guardrail import guardrail_agent
 
     state = {
         "file_context": "",

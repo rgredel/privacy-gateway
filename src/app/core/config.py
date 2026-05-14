@@ -20,7 +20,7 @@ class Settings(BaseSettings):
 
     # Default Models
     cloud_model_default: str = "gemini-2.5-flash"
-    local_model_default: str = "qooba/bielik-1.5b-v3.0-instruct:Q8_0"
+    local_model_default: str = "bielik-1.5b"
     ollama_base_url: str = "http://localhost:11434"
 
     # Security

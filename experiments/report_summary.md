@@ -6,30 +6,40 @@ Automatycznie wygenerowany raport z ewaluacji Privacy Gateway.
 
 | Doc ID | Kategoria | GT | GW F1 | PR F1 | HB F1 |
 |--------|-----------|---:|------:|------:|------:|
-| 0 | simple | 2 | 1.0 | 0.6667 | 1.0 |
-| 1 | simple | 1 | 0.0 | 1.0 | 0.0 |
-| 2 | simple | 1 | 0.6667 | 1.0 | 0.6667 |
-| 3 | medium | 2 | 0.8 | 0.6667 | 0.8 |
-| 4 | medium | 2 | 0.6667 | 0.6667 | 1.0 |
-| 5 | complex | 4 | 0.8 | 0.8571 | 0.6667 |
-| 6 | complex | 4 | 0.5 | 0.6667 | 0.3333 |
-| 7 | false_positive_bait | 0 | 0.0 | 0.0 | 0.0 |
-| 8 | false_positive_bait | 0 | 0.0 | 0.0 | 0.0 |
-| 9 | false_positive_bait | 0 | 0.0 | 0.0 | 0.0 |
-| 10 | false_positive_bait | 0 | 0.0 | 0.0 | 0.0 |
-| 11 | clean | 0 | 0.0 | 1.0 | 1.0 |
+| 0 | simple | 2 | 1.0 | 0.6667 | 0.6667 |
+| 1 | simple | 1 | 0.0 | 1.0 | 1.0 |
+| 2 | simple | 1 | 1.0 | 1.0 | 0.0 |
+| 3 | medium | 2 | 1.0 | 0.6667 | 0.6667 |
+| 4 | medium | 2 | 1.0 | 0.6667 | 0.0 |
+| 5 | complex | 4 | 0.8571 | 0.8571 | 0.8571 |
+| 6 | complex | 4 | 0.5714 | 0.6667 | 0.6667 |
+| 7 | false_positive_bait | 0 | 1.0 | 0.0 | 1.0 |
+| 8 | false_positive_bait | 0 | 1.0 | 0.0 | 1.0 |
+| 9 | false_positive_bait | 0 | 1.0 | 0.0 | 1.0 |
+| 10 | false_positive_bait | 0 | 1.0 | 0.0 | 1.0 |
+| 11 | clean | 0 | 1.0 | 1.0 | 1.0 |
 
 **Mikro-uśrednienie:**
 
 | System | Precision | Recall | F1 | Status |
 |--------|----------:|-------:|---:|--------|
-| Gateway (Bielik) | 0.3768 | ❌ FAIL |
-| Presidio (NER) | 0.6452 | ✅ PASS |
-| Hybrid (Seq) | 0.4348 | ❌ FAIL |
+| Gateway (Bielik) | 0.8 | ✅ PASS |
+| Presidio (NER) | 0.625 | ✅ PASS |
+| Hybrid (Seq) | 0.6667 | ✅ PASS |
 
 ## Eksperyment 2 – Utility Score
 
-*Brak wyników – E2 nie został uruchomiony.*
+| Doc ID | Kategoria | F1 Generic | F1 Semantic | F1 Native | Poprawa (Sem) |
+|--------|-----------|-----------:|------------:|----------:|--------------:|
+| 0 | simple | 0.7803 | 1.0 | 1.0 | 21.97% |
+| 1 | simple | 0.8819 | 1.0 | 1.0 | 11.81% |
+| 2 | simple | 0.8194 | 1.0 | 1.0 | 18.06% |
+| 3 | medium | 0.7962 | 1.0 | 1.0 | 20.38% |
+| 4 | medium | 0.7418 | 1.0 | 1.0 | 25.82% |
+| 5 | complex | 0.803 | 1.0 | 1.0 | 19.7% |
+| 6 | complex | 0.7645 | 1.0 | 1.0 | 23.55% |
+
+**Średni BERTScore (Semantic): 1.0000** (Poprawa względem Generic: +0.2018)
 
 ## Eksperyment 3 – Prompt Injection Red-Team
 
@@ -80,18 +90,17 @@ Automatycznie wygenerowany raport z ewaluacji Privacy Gateway.
 
 ## Eksperyment 4 – Latency Benchmark
 
-| Zapytanie | Direct [ms] | Gateway [ms] | Overhead [ms] | Payload Δ |
+| Wariant | Direct [ms] | Gateway [ms] | Overhead [ms] | Payload Δ |
 |-----------|------------:|-------------:|--------------:|----------:|
-| Jakie są dane kontrahenta z ostatniej fa... | 0 ± 0 | 0 ± 0 | +0 | -0% |
-| Z kim powinienem się kontaktować w spraw... | 0 ± 0 | 0 ± 0 | +0 | -0% |
-| Na jakie konto mam przelać należność za ... | 0 ± 0 | 0 ± 0 | +0 | -0% |
+| Krótki (1x) (199 znaków) | 3972.8 ± 121.1 | 4713.8 ± 645.3 | +741.0 | -0.0% |
+| Średni (10x) (1990 znaków) | 4626.9 ± 263.1 | 6186.7 ± 365.4 | +1559.8 | -0.0% |
+| Długi (50x) (9950 znaków) | 5630.4 ± 1183.2 | 8966.4 ± 789.7 | +3336.0 | -0.0% |
 
 ## Tabela zbiorcza
 
 | Eksperyment | Metryka | Wynik | Próg | Status |
 |-------------|---------|------:|-----:|--------|
-| Generowanie korpusu | — | — | — | ❌ |
 | E1 – Detekcja PII (F1-score) | — | — | — | ✅ |
-| E2 – Utility Score (BERTScore) | — | — | — | ✅ |
+| E2 – Utility Score (BERTScore) | — | — | — | ❌ |
 | E3 – Prompt Injection Red-Team | — | — | — | ✅ |
 | E4 – Latency Benchmark | — | — | — | ✅ |

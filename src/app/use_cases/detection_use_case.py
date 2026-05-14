@@ -18,21 +18,23 @@ class DetectionUseCase:
         self.llm_service = llm_service
         self.privacy_engine = privacy_engine
 
-    async def execute(self, text: str, model_name: str, mode: str = "hybrid") -> tuple[List[str], List[str]]:
+    async def execute(self, text: str, mode: str = "hybrid", model_name: Optional[str] = None) -> tuple[List[str], List[str]]:
         """Executes the PII detection process based on the selected mode.
         
         Args:
             text (str): The input text to be scanned for PII.
-            model_name (str): Identifier of the LLM model to use for analysis.
             mode (str): Detection strategy: 'ner-only', 'llm-only', or 'hybrid'.
+            model_name (Optional[str]): Identifier of the LLM model. Defaults to local_model_default.
             
         Returns:
             tuple[List[str], List[str]]: (List of detected PII strings, Debug logs).
         """
-        logs = [f"Detection started in '{mode}' mode using model '{model_name}'."]
+        from src.app.core.config import settings
+        m_name = model_name or settings.local_model_default
+        logs = [f"Detection started in '{mode}' mode using model '{m_name}'."]
         
         if mode == "llm-only":
-            pii = await self.llm_service.analyze_pii(text, model_name=model_name)
+            pii = await self.llm_service.analyze_pii(text, model_name=m_name)
             logs.append(f"LLM-only: Detected {len(pii)} items.")
             return pii, logs
             
@@ -48,7 +50,7 @@ class DetectionUseCase:
         verified_pii, reasonings = await self.llm_service.adjudicate_entities(
             text, 
             detailed_entities, 
-            model_name=model_name
+            model_name=m_name
         )
         
         for val, reason in reasonings.items():

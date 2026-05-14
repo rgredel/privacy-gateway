@@ -21,6 +21,9 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
+import logging
+logging.basicConfig(level=logging.INFO, format='%(message)s')
+
 # ── Importy z projektu głównego ───────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -89,13 +92,13 @@ import asyncio
 
 def run_gateway_detection(detection_uc, text: str) -> list[str]:
     """Wywołuje DetectionUseCase (LLM-only)."""
-    detected = asyncio.run(detection_uc.execute(text, mode="llm-only"))
+    detected, logs = asyncio.run(detection_uc.execute(text, mode="llm-only"))
     print(f"    [Gateway] Wykryte: {detected}")
     return detected
 
 def run_hybrid_detection(detection_uc, text: str) -> list[str]:
     """Wywołuje DetectionUseCase (Presidio -> LLM)."""
-    detected = asyncio.run(detection_uc.execute(text, mode="hybrid"))
+    detected, logs = asyncio.run(detection_uc.execute(text, mode="hybrid"))
     print(f"    [Hybrid] Wykryte: {detected}")
     return detected
 
