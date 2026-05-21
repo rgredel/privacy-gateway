@@ -162,6 +162,11 @@ def setup_presidio_analyzer() -> Optional[AnalyzerEngine]:
             default_score_threshold=0.6
         )
         
+        # Wymuszamy nazwę dla rozpoznawcy Transformers, aby łatwiej go filtrować
+        for rec in analyzer.registry.recognizers:
+            if "Transformers" in type(rec).__name__:
+                rec.name = "TransformersRecognizer"
+        
         # Add spaCy NER as a second ensemble engine via CustomSpacyRecognizer
         # Optimization: Reuse the spaCy model already loaded by the transformers engine
         spacy_model = getattr(nlp_engine, "nlp", None)
@@ -190,18 +195,31 @@ def setup_presidio_analyzer() -> Optional[AnalyzerEngine]:
         )
         analyzer.registry.add_recognizer(zip_code_rec)
 
-        # Dates (Simplified pattern)
-        date_rec = PatternRecognizer(
-            supported_entity="DATE_TIME",
-            patterns=[Pattern("Date", r"\b\d{2}[./-]\d{2}[./-]\d{4}\b", 0.6)],
+        # Invoice Numbers (INV) - Robust Production Pattern
+        inv_rec = PatternRecognizer(
+            supported_entity="INV",
+            patterns=[
+                # Matches patterns like: FV/123/2024, FA-2024-01-123, 123/01/2024/FS, Nr 123/2024
+                Pattern(
+                    "Invoice_Standard", 
+                    r"\b(?:FV|FA|FS|F|KOR|PRO|INV|Nr|No)[ /-]?(?:\d+[ /-]?){1,4}(?:\d{2,4})\b", 
+                    0.8
+                ),
+                # Matches purely numeric/slash patterns: 2024/01/123, 123/2024
+                Pattern(
+                    "Invoice_Numeric", 
+                    r"\b\d{1,5}(?:[/-]\d{1,4}){1,3}\b", 
+                    0.4 # Lower score to avoid catching dates (which are excluded anyway)
+                )
+            ],
             supported_language="pl",
         )
-        analyzer.registry.add_recognizer(date_rec)
+        analyzer.registry.add_recognizer(inv_rec)
         
         # Polish Bank Account Numbers (IBAN/NRB)
         iban_rec = PatternRecognizer(
             supported_entity="PL_IBAN",
-            patterns=[Pattern("IBAN", r"\b[A-Z]{2}\d{2}[ ]?(\d{4}[ ]?){5}\d{4}\b|\b\d{2}[ ]?(\d{4}[ ]?){5}\d{4}\b", 0.85)],
+            patterns=[Pattern("IBAN", r"\b[A-Z]{2}\d{2}[ ]?(?:\d{4}[ ]?){5}\d{4}\b|\b\d{2}[ ]?(?:\d{4}[ ]?){5}\d{4}\b", 0.85)],
             supported_language="pl",
         )
         analyzer.registry.add_recognizer(iban_rec)

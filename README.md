@@ -4,7 +4,7 @@ System wieloagentowy (Multi-Agent System) oparty na **LangGraph**, służący do
 
 ## 🚀 Główne Funkcje
 - **Hybrydowa Detekcja PII**: Połączenie silnika Microsoft Presidio (wzorce) z lokalnym modelem LLM (kontekst).
-- **Lokalne Przetwarzanie**: Wykorzystanie modelu **Bielik v3** (via Ollama) do anonimizacji, co gwarantuje, że surowe dane nie opuszczają lokalnej infrastruktury.
+- **Bielik 1.5B (Ollama)**: Local adjudication model (`qooba/bielik-1.5b-v3.0-instruct:Q8_0`).
 - **Dynamiczne Maskowanie**: Automatyczna zamiana danych wrażliwych na bezpieczne tokeny i ich przywracanie po uzyskaniu odpowiedzi z chmury.
 - **Guardrail Agent**: Weryfikacja zapytań pod kątem ataków typu Prompt Injection.
 
@@ -32,11 +32,12 @@ python -m spacy download pl_core_news_lg
 ```
 
 ### 3. Konfiguracja Ollama (Model Bielik)
-System wykorzystuje model **Bielik v3** zoptymalizowany pod język polski.
+System wykorzystuje model **Bielik 1.5B (v3.0-instruct, Q8_0)** zoptymalizowany pod język polski.
 1. Pobierz i zainstaluj Ollama z [ollama.com](https://ollama.com).
 2. Uruchom terminal i pobierz wymagany model:
 ```bash
-ollama pull qooba/bielik-1.5b-v3.0-instruct:Q8_0
+    - **Local Judge**: Bielik 1.5B (v3.0-instruct, Q8_0) hosted via Ollama.
+    - **Cloud Judge**: Google Gemini 2.5 Flash (API).env
 ```
 
 ### 4. Zmienne środowiskowe (.env)

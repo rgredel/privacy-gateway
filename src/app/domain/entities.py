@@ -110,4 +110,4 @@ class GraphState(BaseModel):
     detection_debug: List[str] = Field(default_factory=list, description="Detailed logs from the detection pipeline")
     privacy_warnings: List[str] = Field(default_factory=list)
     cloud_model: str = Field(default="gemini-2.5-flash")
-    local_model: str = Field(default="bielik-1.5b")
+    local_model: str = Field(default="qooba/bielik-1.5b-v3.0-instruct:Q8_0")

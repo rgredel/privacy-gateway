@@ -46,15 +46,26 @@ class DetectionUseCase:
             pii = list(set([ent.value for ent in detailed_entities]))
             return pii, logs
             
-        # Hybrid Mode: Semantic Adjudication (UDRIL pattern)
-        verified_pii, reasonings = await self.llm_service.adjudicate_entities(
-            text, 
-            detailed_entities, 
-            model_name=m_name
-        )
+        # In hybrid mode, we want the LLM to judge everything to ensure highest precision
+        # and resistance to False Positives (like historical figures or public data).
+        high_conf = []
+        to_adjudicate = detailed_entities
         
-        for val, reason in reasonings.items():
-            status = "✅ APPROVED" if val in verified_pii else "❌ REJECTED"
-            logs.append(f"Judge: {val} -> {status} ({reason})")
+        verified_pii = []
+        logs.append(f"Adjudicating all {len(detailed_entities)} candidates via LLM judge.")
+        
+        if to_adjudicate:
+            llm_verified, reasonings = await self.llm_service.adjudicate_entities(
+                text, 
+                to_adjudicate, 
+                model_name=m_name
+            )
+            verified_pii.extend(llm_verified)
             
-        return verified_pii, logs
+            for val, reason in reasonings.items():
+                status = "✅ APPROVED" if val in llm_verified else "❌ REJECTED"
+                logs.append(f"Judge: {val} -> {status} ({reason})")
+        else:
+            logs.append("No low-confidence items to adjudicate.")
+            
+        return list(set(verified_pii)), logs

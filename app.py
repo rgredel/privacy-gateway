@@ -145,8 +145,7 @@ async def on_message(message: cl.Message):
             debug_info += f"- **Masked Query:**\n> `{final_state.masked_query}`\n"
             
             if final_state.masked_context:
-                context_snippet = final_state.masked_context[:200] + "..." if len(final_state.masked_context) > 200 else final_state.masked_context
-                debug_info += f"- **Masked Context (Files):**\n```\n{context_snippet}\n```\n"
+                debug_info += f"- **Masked Context (Files):**\n```\n{final_state.masked_context}\n```\n"
 
             # Show detection pipeline steps
             if final_state.detection_debug:

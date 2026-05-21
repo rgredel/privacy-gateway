@@ -57,12 +57,32 @@ def create_privacy_graph(
             pii_strings = [e.value for e in new_labeled_entities]
             detection_logs = [f"NER-only mode: Found {len(pii_strings)} entities locally."]
         else:
-            pii_strings, detection_logs = await detection_uc.execute(
+            # 1a. Get detailed entities from NER engine first (to keep labels)
+            detailed_ner_entities = privacy_engine.analyze_detailed(text)
+            
+            # 1b. Use LLM to adjudicate (verify) these entities
+            verified_pii_strings, detection_logs = await detection_uc.execute(
                 text, 
-                model_name=state.local_model, 
-                mode=state.detection_mode
+                mode=state.detection_mode,
+                model_name=state.local_model
             )
-            new_labeled_entities = await labeling_uc.execute(pii_strings, model_name=state.local_model)
+            
+            # 1c. Filter original entities - PRESERVE LABELS from NER
+            new_labeled_entities = []
+            for ent in detailed_ner_entities:
+                if ent.value in verified_pii_strings:
+                    new_labeled_entities.append(ent)
+                    
+            # 1d. Handle entities discovered by LLM that were NOT found by NER (if any)
+            ner_values = {e.value for e in detailed_ner_entities}
+            missing_pii = [val for val in verified_pii_strings if val not in ner_values]
+            
+            if missing_pii:
+                # Only call labeling for truly new findings
+                newly_labeled = await labeling_uc.execute(missing_pii, model_name=state.local_model)
+                new_labeled_entities.extend(newly_labeled)
+            
+            pii_strings = verified_pii_strings
         
         # Merge with existing entities to maintain recall over multiple turns
         all_labeled_entities = state.labeled_pii_entities + new_labeled_entities

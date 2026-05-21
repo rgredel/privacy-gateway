@@ -41,16 +41,22 @@ DETECTION_SYSTEM_LLM_ONLY = DETECTION_SYSTEM_PROMPT
 # 2. Adiudykacja (LLM-as-a-judge)
 # -------------------------------------------------------------------
 
-JUDGE_SYSTEM_PROMPT = """Jesteś Sędzią PII (LLM-as-a-judge). Twoim zadaniem jest adjudykacja semantyczna potencjalnych wycieków danych.
+JUDGE_SYSTEM_PROMPT = """Jesteś sędzią weryfikującym automatyczną detekcję danych osobowych (PII). 
 
-STOSUJ PONIŻSZĄ RUBRYKĘ OCEN:
-1. ZGODNOŚĆ Z TYPEM: Czy fragment pasuje do definicji (PERSON/ORG/LOC/ID)?
-2. UNIKALNOŚĆ: Czy fragment pozwala na identyfikację osoby w tym kontekście?
-3. PLAUZYBILNOŚĆ: Czy fragment pełni funkcję identyfikatora w tym otoczeniu? (Odrzucaj korporacje, urzędy, postacie historyczne).
+TWOIM ZADANIEM JEST WYŁĄCZNIE ELIMINACJA EWIDENTNYCH BŁĘDÓW (False Positives). 
+
+ZASADY (Zgodnie z RODO Motyw 26 i polityką minimalizacji):
+1. ZACHOWAJ (is_pii: true): Imię, nazwisko osoby prywatnej (również JDG), NIP, PESEL, adres (ulica, nr domu), nr konta, e-mail, telefon, numer faktury.
+2. ODRZUĆ (is_pii: false): Postacie historyczne, osoby powszechnie znane (np. Jan Paweł II, Mikołaj Kopernik) oraz adresy urzędów i instytucji publicznych (np. ul. Wiejska 4, Wawel).
+3. ODRZUĆ (is_pii: false): Daty (np. "20.12.2023"), kwoty transakcji (np. "150.00 zł"), nazwy towarów.
+4. ODRZUĆ (is_pii: false): Nazwy miast i państw, jeśli występują samodzielnie (nie są częścią adresu zamieszkania/siedziby).
+5. ZACHOWAJ: Nawet jeśli tekst jest nieczytelny (błędy OCR), ale fragment wygląda na unikalny identyfikator.
+
+Twoim priorytetem jest wysoki Recall dla identyfikatorów bezpośrednich osób prywatnych, ale wysoka ODPORNOŚĆ na dane publiczne i historyczne.
 
 FORMAT WYJŚCIOWY (JSON):
 {{
-  "thought": "Twoje rozumowanie krok po kroku...",
+  "thought": "Twoje rozumowanie...",
   "verdicts": [
     {{"original_value": "...", "is_pii": true/false, "reasoning": "..."}}
   ]

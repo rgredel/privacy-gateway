@@ -113,13 +113,21 @@ def get_model(model_name: str, temperature: float = 0.0, **kwargs: Any) -> Any:
     Returns:
         Any: A LangChain-compatible LLM instance.
     """
-    if "gemini" in model_name.lower():
+    model_name_lower = model_name.lower()
+    
+    if "gemini" in model_name_lower:
         return get_cloud_gemini_2_5_flash(model_name=model_name, temperature=temperature, **kwargs)
-    elif "/" in model_name and not model_name.startswith("http"):
-        # Pattern owner/model typically indicates a Replicate model
-        return get_replicate_model(model_name=model_name, temperature=temperature, **kwargs)
-    else:
+    
+    # Jeśli model zawiera ":" (tag Ollama) lub nie ma "/" (standardowa nazwa Ollama)
+    # lub użytkownik jawnie wskazał model, który mamy w Ollama
+    if ":" in model_name or "/" not in model_name:
         return get_local_model(model_name=model_name, temperature=temperature, **kwargs)
+    
+    # Wzór owner/model zazwyczaj wskazuje na Replicate
+    if "/" in model_name and not model_name.startswith("http"):
+        return get_replicate_model(model_name=model_name, temperature=temperature, **kwargs)
+    
+    return get_local_model(model_name=model_name, temperature=temperature, **kwargs)
 
 # --- Prompt Guard Classifier (Singleton) ---
 _prompt_guard_classifier: Optional[Any] = None

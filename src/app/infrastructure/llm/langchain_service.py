@@ -1,5 +1,6 @@
 import logging
 import json
+import time
 from typing import List, Dict, Optional, Any, Type, TypeVar
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, BaseMessage
 from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
@@ -126,6 +127,6 @@ class LangChainService(ILLMService):
             
         return {
             "answer": content, 
-            "debug_prompt": f"System: {CLOUD_SYSTEM_PROMPT[:100]}...\nUser: {CLOUD_USER_PROMPT.format(context='...', query=query)}", 
+            "debug_prompt": f"System: {CLOUD_SYSTEM_PROMPT}\nUser: {CLOUD_USER_PROMPT.format(context=context, query=query)}", 
             "warnings": []
         }

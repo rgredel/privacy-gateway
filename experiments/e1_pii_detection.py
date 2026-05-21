@@ -1,247 +1,326 @@
 """
 e1_pii_detection.py – Eksperyment 1: Ewaluacja skuteczności detekcji PII.
 
-Porównuje F1-score bramki Privacy Gateway (Bielik v3 via Ollama)
-z klasycznym NER (Microsoft Presidio + HerBERT Base NER) na nieustrukturyzowanym
-tekście naturalnym.
-
-Odpowiada na: Pytanie badawcze P1
-Kryterium sukcesu: F1(Gateway) ≥ 0.55 i F1(Gateway) > F1(Presidio)
+Zgodnie z Rozdziałem 6.4.1 pracy magisterskiej oraz prośbą użytkownika.
+Badane podejścia:
+1. RegEx only (Presidio-based, filtered to patterns)
+2. HerBERT only (Pure NER)
+3. HerBERT + RegEx (Ensemble NER)
+4. Hybrid (Ens + Bielik 1.5 - Local)
+5. Hybrid (Ens + Gemini 2.5 - Cloud)
 
 Uruchomienie:
-    python experiments/e1_pii_detection.py
+    python experiments/e1_pii_detection.py [--limit N] [--resume]
 """
 
 import csv
 import json
 import sys
-from pathlib import Path
-
-# Wymuszenie UTF-8 na konsoli Windows (cp1250 nie obsługuje ✅/→/═)
-sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-
+import asyncio
+import re
+import argparse
 import logging
+from pathlib import Path
+from typing import List, Dict, Any, Set, Tuple, Optional
+from collections import defaultdict
+
+# Wymuszenie UTF-8 na konsoli Windows
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 logging.basicConfig(level=logging.INFO, format='%(message)s')
+# Wyłączenie logów HTTP z bibliotek zewnętrznych
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 # ── Importy z projektu głównego ───────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-CORPUS_PATH = PROJECT_ROOT / "experiments" / "corpus" / "corpus.json"
+from src.app.core.config import settings
+from src.app.infrastructure.llm.factory import get_model, get_local_model, get_replicate_model, get_cloud_gemini_2_5_flash
+from src.app.infrastructure.llm.langchain_service import LangChainService
+from src.app.use_cases.detection_use_case import DetectionUseCase
+from src.app.infrastructure.services.presidio_factory import setup_presidio_analyzer
+from src.app.infrastructure.services.presidio_service import PresidioService
+
+# Konfiguracja ścieżek
+CORPUS_PATH = PROJECT_ROOT / "experiments" / "corpus" / "benchmark_corpus.json"
 RESULTS_DIR = PROJECT_ROOT / "experiments" / "results"
 RESULTS_CSV = RESULTS_DIR / "results_e1.csv"
+RESULTS_PER_TYPE_CSV = RESULTS_DIR / "results_e1_per_type.csv"
+CHECKPOINT_FILE = RESULTS_DIR / "checkpoint_e1.json"
 
+# Modele
+BIELIK_LOCAL = "qooba/bielik-1.5b-v3.0-instruct:Q8_0"
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 1. Narzędzia dopasowania PII (matching)
+# 1. Narzędzia detekcji
+# ══════════════════════════════════════════════════════════════════════════════
+
+def detect_regex_only(presidio_service: PresidioService, text: str) -> List[str]:
+    detailed = presidio_service.analyze_detailed(text)
+    nlp_recognizers = ["TransformersRecognizer", "CustomSpacyRecognizer", "SpacyRecognizer"]
+    regex_entities = [ent.value for ent in detailed if ent.recognizer not in nlp_recognizers]
+    return list(set(regex_entities))
+
+def detect_herbert_only(presidio_service: PresidioService, text: str) -> List[str]:
+    detailed = presidio_service.analyze_detailed(text)
+    herbert_labels = ["PERSON", "LOCATION", "ORGANIZATION"]
+    return list(set([ent.value for ent in detailed if ent.label in herbert_labels]))
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 2. Narzędzia ewaluacji i Checkpointy
 # ══════════════════════════════════════════════════════════════════════════════
 
 def normalize(s: str) -> str:
+    if not isinstance(s, str): return ""
     return s.strip().lower()
 
-
 def pii_matches(detected: str, truth: str) -> bool:
-    """Dopasowanie: exact match lub zawieranie (jeden jest podciągiem drugiego)."""
     d = normalize(detected)
     t = normalize(truth)
-    if not d or not t:
-        return False
+    if not d or not t: return False
     return d == t or d in t or t in d
 
+def compute_metrics_detailed(detected_list: List[str], gt_entities: List[Dict]) -> Dict[str, Any]:
+    type_metrics = defaultdict(lambda: {"tp": 0, "fp": 0, "fn": 0})
+    matched_gt_indices = set()
+    matched_det_indices = set()
 
-def compute_metrics(detected: list[str], ground_truth: list[str]) -> dict:
-    """Oblicza TP, FP, FN, Precision, Recall, F1 dla jednego dokumentu."""
-    matched_gt = set()
-    matched_det = set()
-
-    for i, d in enumerate(detected):
-        for j, gt in enumerate(ground_truth):
-            if j not in matched_gt and pii_matches(d, gt):
-                matched_det.add(i)
-                matched_gt.add(j)
+    for d_idx, d_text in enumerate(detected_list):
+        for gt_idx, gt_ent in enumerate(gt_entities):
+            if gt_idx not in matched_gt_indices and pii_matches(d_text, gt_ent["text"]):
+                label = gt_ent["label"]
+                type_metrics[label]["tp"] += 1
+                matched_gt_indices.add(gt_idx)
+                matched_det_indices.add(d_idx)
                 break
+    
+    for gt_idx, gt_ent in enumerate(gt_entities):
+        if gt_idx not in matched_gt_indices:
+            label = gt_ent["label"]
+            type_metrics[label]["fn"] += 1
+            
+    fp_count = len(detected_list) - len(matched_det_indices)
+    total_tp = sum(m["tp"] for m in type_metrics.values())
+    total_fn = sum(m["fn"] for m in type_metrics.values())
+    
+    return {
+        "total": {"tp": total_tp, "fp": fp_count, "fn": total_fn},
+        "per_type": type_metrics
+    }
 
-    tp = len(matched_gt)
-    fp = len(detected) - len(matched_det)
-    fn = len(ground_truth) - len(matched_gt)
+def save_checkpoint(last_index: int, stats: dict, per_type_stats: dict, skipped_docs: list):
+    checkpoint = {
+        "last_index": last_index,
+        "stats": stats,
+        "per_type_stats": {k: dict(v) for k, v in per_type_stats.items()},
+        "skipped_docs": skipped_docs
+    }
+    with open(CHECKPOINT_FILE, "w", encoding="utf-8") as f:
+        json.dump(checkpoint, f, ensure_ascii=False, indent=2)
 
-    precision = tp / (tp + fp) if (tp + fp) > 0 else 1.0
-    recall = tp / (tp + fn) if (tp + fn) > 0 else 1.0
-    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
-
-    return {"tp": tp, "fp": fp, "fn": fn, "precision": precision, "recall": recall, "f1": f1}
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# 2. Baseline NER – Microsoft Presidio z polskim modelem spaCy
-# ══════════════════════════════════════════════════════════════════════════════
-
-def run_presidio(analyzer, text: str) -> list[str]:
-    """Uruchamia Presidio z nowej infrastruktury i zwraca listę wykrytych PII."""
-    from src.app.infrastructure.services.presidio_service import PresidioService
-    ps = PresidioService(analyzer)
-    return ps.get_candidates(text)
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# 3. Privacy Gateway – detekcja Bielik oraz Hybrydowa
-# ══════════════════════════════════════════════════════════════════════════════
-
-import asyncio
-
-def run_gateway_detection(detection_uc, text: str) -> list[str]:
-    """Wywołuje DetectionUseCase (LLM-only)."""
-    detected, logs = asyncio.run(detection_uc.execute(text, mode="llm-only"))
-    print(f"    [Gateway] Wykryte: {detected}")
-    return detected
-
-def run_hybrid_detection(detection_uc, text: str) -> list[str]:
-    """Wywołuje DetectionUseCase (Presidio -> LLM)."""
-    detected, logs = asyncio.run(detection_uc.execute(text, mode="hybrid"))
-    print(f"    [Hybrid] Wykryte: {detected}")
-    return detected
-
+def load_checkpoint():
+    if not CHECKPOINT_FILE.exists():
+        return None
+    with open(CHECKPOINT_FILE, "r", encoding="utf-8") as f:
+        data = json.load(f)
+        # Convert dict back to defaultdict
+        pts = {}
+        for config, label_data in data["per_type_stats"].items():
+            pts[config] = defaultdict(lambda: {"tp": 0, "fn": 0}, label_data)
+        data["per_type_stats"] = pts
+        return data
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 4. Główna pętla eksperymentu
+# 3. Główna pętla eksperymentu
 # ══════════════════════════════════════════════════════════════════════════════
 
-def main():
-    print("=" * 70)
-    print("EKSPERYMENT 1 – Ewaluacja skuteczności detekcji PII (F1-score)")
-    print("=" * 70)
+async def main():
+    parser = argparse.ArgumentParser(description="Eksperyment E1 – Ewaluacja detekcji PII")
+    parser.add_argument("--limit", type=int, default=None, help="Limit liczby dokumentów")
+    parser.add_argument("--resume", action="store_true", help="Wznów od ostatniego checkpointu")
+    args = parser.parse_args()
 
-    # Wczytanie korpusu
+    # Inicjalizacja bazowa
+    configurations = ["RegEx only", "HerBERT only", "HerBERT + RegEx", "Hybrid (Bielik 1.5)", "Hybrid (Gemini 2.5)"]
+    stats = {config: {"tp": 0, "fp": 0, "fn": 0} for config in configurations}
+    per_type_stats = {config: defaultdict(lambda: {"tp": 0, "fn": 0}) for config in configurations}
+    skipped_docs = []
+    start_from = 0
+
+    if args.resume:
+        cp = load_checkpoint()
+        if cp:
+            print(f"[E1] Wznawianie od dokumentu {cp['last_index'] + 1}...")
+            start_from = cp["last_index"] + 1
+            stats = cp["stats"]
+            per_type_stats = cp["per_type_stats"]
+            skipped_docs = cp["skipped_docs"]
+        else:
+            print("[E1] Brak checkpointu do wznowienia. Start od zera.")
+    else:
+        # Jeśli nie wznawiamy, usuwamy stary checkpoint (jeśli istnieje)
+        if CHECKPOINT_FILE.exists():
+            print("[E1] Usunięto stary checkpoint.")
+            CHECKPOINT_FILE.unlink()
+
+    print("=" * 95)
+    print("🔬 EKSPERYMENT E1 – Ewaluacja skuteczności detekcji PII")
+    print(f"   Limit dokumentów: {args.limit if args.limit else 'Brak (pełny korpus)'}")
+    print("=" * 95)
+
     if not CORPUS_PATH.exists():
         print(f"[BŁĄD] Brak korpusu: {CORPUS_PATH}")
-        print("       Zadbaj o obecność pliku corpus.json")
         sys.exit(1)
 
     with open(CORPUS_PATH, encoding="utf-8") as f:
         corpus = json.load(f)
-    print(f"[E1] Załadowano {len(corpus)} dokumentów z korpusu.\n")
-
-    # ── Presidio i Use Case ────────────────────────────────────────────────
-    print("[E1] Konfiguracja serwisów...")
-    from src.app.core.config import settings
-    from src.app.infrastructure.llm.factory import get_local_model, get_cloud_gemini_2_5_flash
-    from src.app.infrastructure.llm.langchain_service import LangChainService
-    from src.app.use_cases.detection_use_case import DetectionUseCase
-    from src.app.infrastructure.services.presidio_factory import setup_presidio_analyzer
-    from src.app.infrastructure.services.presidio_service import PresidioService
     
+    if args.limit:
+        corpus = corpus[:args.limit]
+        
+    print(f"[E1] Załadowano {len(corpus)} dokumentów do przetworzenia.\n")
+
+    # ── Inicjalizacja komponentów ──────────────────────────────────────────
+    analyzer = setup_presidio_analyzer()
+    privacy_engine = PresidioService(analyzer)
+    
+    print("[E1] Przygotowanie modeli LLM...")
     try:
-        analyzer = setup_presidio_analyzer()
-        presidio_available = analyzer is not None
-        if presidio_available:
-            print("     ✔ Presidio/HerBERT gotowe.")
-        else:
-            raise Exception("setup_presidio_analyzer returned None")
+        model_local = get_local_model(model_name=BIELIK_LOCAL)
+        llm_service_local = LangChainService(local_llm=model_local, cloud_llm=model_local)
+        detection_uc_local = DetectionUseCase(llm_service=llm_service_local, privacy_engine=privacy_engine)
+        print(f"     ✔ Bielik 1.5 (Local) gotowy.")
     except Exception as e:
-        print(f"     ✘ Presidio niedostępne: {e}")
-        presidio_available = False
+        print(f"     ✘ Błąd Bielik Local: {e}")
+        detection_uc_local = None
 
-    # UWAGA: Używamy Gemini 2.5 Flash do testu optymalizacji Recall
-    cloud_llm_judge = get_cloud_gemini_2_5_flash(model_name="gemini-2.5-flash")
-    llm_service = LangChainService(local_llm=cloud_llm_judge, cloud_llm=cloud_llm_judge)
-    privacy_engine = PresidioService(analyzer=analyzer if presidio_available else None)
-    
-    detection_uc = DetectionUseCase(llm_service=llm_service, privacy_engine=privacy_engine)
-    print("     ✔ DetectionUseCase gotowy.\n")
+    try:
+        model_cloud = get_cloud_gemini_2_5_flash()
+        llm_service_cloud = LangChainService(local_llm=model_cloud, cloud_llm=model_cloud)
+        detection_uc_cloud = DetectionUseCase(llm_service=llm_service_cloud, privacy_engine=privacy_engine)
+        print(f"     ✔ Gemini 2.5 Flash (Cloud) gotowy.")
+    except Exception as e:
+        print(f"     ✘ Błąd Gemini: {e}")
+        detection_uc_cloud = None
 
-    # ── Wyniki ────────────────────────────────────────────────────────────
-    rows = []
-    gateway_totals = {"tp": 0, "fp": 0, "fn": 0}
-    presidio_totals = {"tp": 0, "fp": 0, "fn": 0}
-    hybrid_totals = {"tp": 0, "fp": 0, "fn": 0}
-
-    for doc in corpus:
+    # Przetwarzanie
+    for i in range(start_from, len(corpus)):
+        doc = corpus[i]
         doc_id = doc["doc_id"]
         text = doc["text"]
-        gt = doc["pii"]
+        gt_entities = doc.get("entities", [])
+        
+        print(f"[{i+1}/{len(corpus)}] Doc {doc_id} - GT: {len(gt_entities)}")
 
-        print(f"  Dokument {doc_id} [{doc['category']}] – {len(gt)} PII w ground truth")
-        print(f"    [GT] Expected: {gt}")
+        # --- 1. RegEx only ---
+        re_detected = detect_regex_only(privacy_engine, text)
+        
+        # --- 2. HerBERT only ---
+        hr_detected = detect_herbert_only(privacy_engine, text)
+        
+        # --- 3. HerBERT + RegEx ---
+        ens_detected = privacy_engine.get_candidates(text)
+        
+        # --- 4. Hybrid (Bielik 1.5) ---
+        hb15_detected = []
+        if detection_uc_local:
+            max_retries = 3
+            failed_bielik = False
+            for attempt in range(max_retries):
+                try:
+                    hb15_detected, _ = await asyncio.wait_for(
+                        detection_uc_local.execute(text, mode="hybrid"),
+                        timeout=45.0
+                    )
+                    failed_bielik = False
+                    break
+                except (asyncio.TimeoutError, Exception) as e:
+                    if attempt < max_retries - 1:
+                        print(f"     [!] Problem z Bielik 1.5 (Próba {attempt+1}/{max_retries}). Retry za 10s...")
+                        await asyncio.sleep(10.0)
+                    else:
+                        print(f"     [!] Bielik 1.5 zawiódł na dokumencie {doc_id}. POMIJAM DOKUMENT.")
+                        failed_bielik = True
+            if failed_bielik:
+                skipped_docs.append(doc_id)
+                continue
 
-        # 1. Gateway (Bielik only)
-        try:
-            gw_detected = run_gateway_detection(detection_uc, text)
-        except Exception as e:
-            print(f"    [BŁĄD Gateway] {e}")
-            gw_detected = []
-        gw_metrics = compute_metrics(gw_detected, gt)
-        for k in ["tp", "fp", "fn"]: gateway_totals[k] += gw_metrics[k]
-
-        # 2. Presidio (NER only)
-        if presidio_available:
+        # --- 5. Hybrid (Gemini 2.5) ---
+        if detection_uc_cloud:
             try:
-                pr_detected = run_presidio(analyzer, text)
-                print(f"    [Presidio] Wykryte: {pr_detected}")
+                hbgm_detected, _ = await detection_uc_cloud.execute(text, mode="hybrid")
             except Exception as e:
-                print(f"    [BŁĄD Presidio] {e}")
-                pr_detected = []
+                print(f"     [!] Błąd Gemini na dokumencie {doc_id}: {e}. POMIJAM DOKUMENT.")
+                skipped_docs.append(doc_id)
+                continue
         else:
-            pr_detected = []
-        pr_metrics = compute_metrics(pr_detected, gt)
-        for k in ["tp", "fp", "fn"]: presidio_totals[k] += pr_metrics[k]
+            hbgm_detected = []
 
-        # 3. Hybrid (Sequential)
-        try:
-            hb_detected = run_hybrid_detection(detection_uc, text)
-        except Exception as e:
-            print(f"    [BŁĄD Hybrid] {e}")
-            hb_detected = []
-        hb_metrics = compute_metrics(hb_detected, gt)
-        for k in ["tp", "fp", "fn"]: hybrid_totals[k] += hb_metrics[k]
+        await asyncio.sleep(2.0)
 
-        print(f"    Gateway: F1={gw_metrics['f1']:.3f} | Presidio: F1={pr_metrics['f1']:.3f} | Hybrid: F1={hb_metrics['f1']:.3f}")
+        # Obliczanie metryk
+        results = {
+            "RegEx only": compute_metrics_detailed(re_detected, gt_entities),
+            "HerBERT only": compute_metrics_detailed(hr_detected, gt_entities),
+            "HerBERT + RegEx": compute_metrics_detailed(ens_detected, gt_entities),
+            "Hybrid (Bielik 1.5)": compute_metrics_detailed(hb15_detected, gt_entities),
+            "Hybrid (Gemini 2.5)": compute_metrics_detailed(hbgm_detected, gt_entities)
+        }
 
-        rows.append({
-            "doc_id": doc_id,
-            "category": doc["category"],
-            "gt_count": len(gt),
-            "gw_f1": round(gw_metrics["f1"], 4),
-            "pr_f1": round(pr_metrics["f1"], 4),
-            "hb_f1": round(hb_metrics["f1"], 4),
-            "gw_tp": gw_metrics["tp"], "gw_fp": gw_metrics["fp"], "gw_fn": gw_metrics["fn"],
-            "pr_tp": pr_metrics["tp"], "pr_fp": pr_metrics["fp"], "pr_fn": pr_metrics["fn"],
-            "hb_tp": hb_metrics["tp"], "hb_fp": hb_metrics["fp"], "hb_fn": hb_metrics["fn"],
-        })
+        for config, m in results.items():
+            stats[config]["tp"] += m["total"]["tp"]
+            stats[config]["fp"] += m["total"]["fp"]
+            stats[config]["fn"] += m["total"]["fn"]
+            for label, lm in m["per_type"].items():
+                per_type_stats[config][label]["tp"] += lm["tp"]
+                per_type_stats[config][label]["fn"] += lm["fn"]
 
-    # ── Metryki mikro-uśrednione ─────────────────────────────────────────
-    print("\n" + "=" * 70)
-    print("WYNIKI ZAGREGOWANE (mikro-uśrednienie)")
-    print("=" * 70)
+        # Checkpoint co 50 dokumentów
+        if (i + 1) % 50 == 0:
+            print(f"\n[CHECKPOINT] Zapisywanie postępu (dok: {i+1})...")
+            save_checkpoint(i, stats, per_type_stats, skipped_docs)
 
-    for label, totals in [("Gateway (Bielik)", gateway_totals), ("Presidio (NER)", presidio_totals), ("Hybrid (Seq)", hybrid_totals)]:
-        tp, fp, fn = totals["tp"], totals["fp"], totals["fn"]
+    # ── Raportowanie wyników ──────────────────────────────────────────────
+    print("\n" + "=" * 95)
+    print(f"{'Konfiguracja':<25} | {'Precision':<10} | {'Recall':<10} | {'F1-score':<10}")
+    print("-" * 95)
+
+    summary_rows = []
+    for config in configurations:
+        tp, fp, fn = stats[config]["tp"], stats[config]["fp"], stats[config]["fn"]
         p = tp / (tp + fp) if (tp + fp) > 0 else 0.0
         r = tp / (tp + fn) if (tp + fn) > 0 else 0.0
         f1 = 2 * p * r / (p + r) if (p + r) > 0 else 0.0
-        print(f"  {label}:")
-        print(f"    Precision = {p:.4f}")
-        print(f"    Recall    = {r:.4f}")
-        print(f"    F1-score  = {f1:.4f}   {'✅ PASS' if f1 >= 0.55 else '❌ FAIL'} (próg ≥ 0.55)")
+        print(f"{config:<25} | {p:.4f}     | {r:.4f}     | {f1:.4f}")
+        summary_rows.append({"model": config, "precision": p, "recall": r, "f1": f1, "tp": tp, "fp": fp, "fn": fn})
 
-        rows.append({
-            "doc_id": f"MICRO_{label}",
-            "category": "aggregate",
-            "gw_f1": round(f1, 4) if "Gateway" in label else "",
-            "pr_f1": round(f1, 4) if "Presidio" in label else "",
-            "hb_f1": round(f1, 4) if "Hybrid" in label else "",
-        })
-
-    # ── Zapis CSV ─────────────────────────────────────────────────────────
+    # Zapis
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    fieldnames = list(rows[0].keys())
     with open(RESULTS_CSV, "w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer = csv.DictWriter(f, fieldnames=summary_rows[0].keys())
         writer.writeheader()
-        writer.writerows(rows)
+        writer.writerows(summary_rows)
+        
+    per_type_rows = []
+    for label, m in sorted(per_type_stats["Hybrid (Gemini 2.5)"].items()):
+        recall = m["tp"] / (m["tp"] + m["fn"]) if (m["tp"] + m["fn"]) > 0 else 0.0
+        per_type_rows.append({"type": label, "tp": m["tp"], "fn": m["fn"], "recall": recall})
 
-    print(f"\n[E1] Wyniki zapisane → {RESULTS_CSV}")
-
+    with open(RESULTS_PER_TYPE_CSV, "w", encoding="utf-8", newline="") as f:
+        if per_type_rows:
+            writer = csv.DictWriter(f, fieldnames=per_type_rows[0].keys())
+            writer.writeheader()
+            writer.writerows(per_type_rows)
+        
+    print(f"\n[E1] Wyniki zapisane w {RESULTS_DIR}")
+    if skipped_docs:
+        print(f"[!] UWAGA: Pominięto {len(skipped_docs)} dokumentów: {skipped_docs}")
+    print("=" * 95)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

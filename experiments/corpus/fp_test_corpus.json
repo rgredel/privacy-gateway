@@ -1,0 +1,252 @@
+[
+  {
+    "doc_id": 1,
+    "text": "Mikołaj Kopernik, słynny astronom, sformułował heliocentryczny model Układu Słonecznego. Jego dzieło \"De revolutionibus orbium coelestium\" to kamień milowy w nauce. Urodził się w Toruniu.",
+    "entities": []
+  },
+  {
+    "doc_id": 2,
+    "text": "Siedziba Sejmu Rzeczypospolitej Polskiej znajduje się przy ulicy Wiejskiej 4 w Warszawie. To ważne miejsce dla polskiej demokracji. Codziennie przewijają się tam politycy.",
+    "entities": []
+  },
+  {
+    "doc_id": 3,
+    "text": "W instrukcji prosimy wpisać dane: Imię Jan, Nazwisko Kowalski. Pamiętaj o poprawnym wypełnieniu każdego pola. To jest tylko przykład.",
+    "entities": []
+  },
+  {
+    "doc_id": 4,
+    "text": "Koncern PKN Orlen jest jednym z największych przedsiębiorstw paliwowych w Europie Środkowej. Jego stacje benzynowe można znaleźć w całej Polsce. Firma odgrywa kluczową rolę w gospodarce.",
+    "entities": []
+  },
+  {
+    "doc_id": 5,
+    "text": "Dzień Niepodległości, obchodzony 11 listopada, to ważne święto państwowe. Upamiętnia odzyskanie suwerenności przez Polskę w 1918 roku. Wtedy cała Polska świętuje.",
+    "entities": []
+  },
+  {
+    "doc_id": 6,
+    "text": "Maria Skłodowska-Curie, dwukrotna laureatka Nagrody Nobla, odkryła polon i rad. Jej prace nad promieniotwórczością zrewolucjonizowały fizykę i chemię. Była wybitną naukowczynią.",
+    "entities": []
+  },
+  {
+    "doc_id": 7,
+    "text": "Wawel 5 w Krakowie to adres Zamku Królewskiego i Katedry, jednego z najważniejszych miejsc w historii Polski. To symbol polskiej państwowości. Turyści chętnie go odwiedzają.",
+    "entities": []
+  },
+  {
+    "doc_id": 8,
+    "text": "Aby zarejestrować konto, wpisz przykładowy Numer PESEL: 12345678901. Zawsze upewnij się, że podajesz prawidłowe dane. W przeciwnym razie rejestracja się nie powiedzie.",
+    "entities": []
+  },
+  {
+    "doc_id": 9,
+    "text": "KGHM Polska Miedź to globalny producent miedzi i srebra. Firma ma swoje kopalnie w Polsce i za granicą. Jest to jedna z największych spółek Skarbu Państwa.",
+    "entities": []
+  },
+  {
+    "doc_id": 10,
+    "text": "Boże Narodzenie to czas radości i spotkań rodzinnych. Obchodzone jest 25 grudnia. Wiele osób czeka na ten dzień przez cały rok.",
+    "entities": []
+  },
+  {
+    "doc_id": 11,
+    "text": "Jan Paweł II, Karol Wojtyła, był papieżem w latach 1978-2005. Jego pontyfikat miał ogromny wpływ na losy świata. Jest uznawany za jednego z najważniejszych Polaków w historii.",
+    "entities": []
+  },
+  {
+    "doc_id": 12,
+    "text": "Pałac Kultury i Nauki znajduje się przy Placu Defilad 1 w Warszawie. Jest to jeden z najbardziej rozpoznawalnych budynków w stolicy. Z jego tarasu widokowego roztacza się piękna panorama miasta.",
+    "entities": []
+  },
+  {
+    "doc_id": 13,
+    "text": "Jako przykład NIP-u można podać: 123-456-78-90. Ten numer służy do identyfikacji podatkowej. Wypełnij go starannie.",
+    "entities": []
+  },
+  {
+    "doc_id": 14,
+    "text": "PKO Bank Polski to największy bank detaliczny w Polsce. Posiada szeroką sieć oddziałów i bankomatów. Oferuje różnorodne usługi finansowe dla klientów indywidualnych i firm.",
+    "entities": []
+  },
+  {
+    "doc_id": 15,
+    "text": "Wielkanoc to najważniejsze święto chrześcijańskie, upamiętniające zmartwychwstanie Jezusa Chrystusa. Jest ruchomym świętem. W Polsce obchodzone jest z wieloma tradycjami.",
+    "entities": []
+  },
+  {
+    "doc_id": 16,
+    "text": "Lech Wałęsa, były prezydent Polski i laureat Pokojowej Nagrody Nobla, był liderem Solidarności. Odegrał kluczową rolę w transformacji ustrojowej. Jego biografia jest bardzo bogata.",
+    "entities": []
+  },
+  {
+    "doc_id": 17,
+    "text": "Kancelaria Prezesa Rady Ministrów mieści się przy Al. Ujazdowskich 1/3 w Warszawie. To tutaj zapadają ważne decyzje dla kraju. Budynek ma długą historię.",
+    "entities": []
+  },
+  {
+    "doc_id": 18,
+    "text": "W polu adresowym wpisz: ul. Przykładowa 1, 00-001 Warszawa. To standardowy format adresu. Upewnij się, że kod pocztowy jest poprawny.",
+    "entities": []
+  },
+  {
+    "doc_id": 19,
+    "text": "PGE Polska Grupa Energetyczna jest największym producentem energii elektrycznej w Polsce. Odpowiada za znaczną część krajowego zapotrzebowania. Jest to kluczowa spółka dla bezpieczeństwa energetycznego.",
+    "entities": []
+  },
+  {
+    "doc_id": 20,
+    "text": "Święto Pracy, obchodzone 1 maja, jest międzynarodowym dniem solidarności ludzi pracy. W Polsce jest dniem wolnym od pracy. Wiele osób wykorzystuje je na majówki.",
+    "entities": []
+  },
+  {
+    "doc_id": 21,
+    "text": "Józef Piłsudski był Marszałkiem Polski i naczelnym wodzem. Miał ogromny wpływ na odzyskanie niepodległości w 1918 roku. Jest jedną z najważniejszych postaci w polskiej historii.",
+    "entities": []
+  },
+  {
+    "doc_id": 22,
+    "text": "Pałac Prezydencki, oficjalna siedziba Prezydenta RP, znajduje się przy Krakowskim Przedmieściu 46/48 w Warszawie. To miejsce ważnych uroczystości państwowych. Jest to piękny klasycystyczny budynek.",
+    "entities": []
+  },
+  {
+    "doc_id": 23,
+    "text": "Podaj przykładowy adres e-mail: jan.kowalski@example.com. Ten adres służy do celów demonstracyjnych. Nie jest prawdziwy.",
+    "entities": []
+  },
+  {
+    "doc_id": 24,
+    "text": "Grupa Lotos, polskie przedsiębiorstwo naftowe, jest ważnym graczem na rynku paliw. Posiada rafinerię w Gdańsku. Została wchłonięta przez PKN Orlen.",
+    "entities": []
+  },
+  {
+    "doc_id": 25,
+    "text": "Dzień Kobiet, obchodzony 8 marca, to międzynarodowe święto. Ma na celu uhonorowanie osiągnięć kobiet i zwrócenie uwagi na ich prawa. W Polsce jest to popularne święto.",
+    "entities": []
+  },
+  {
+    "doc_id": 26,
+    "text": "Adam Mickiewicz, jeden z Trzech Wieszczów, napisał epopeję narodową \"Pan Tadeusz\". Jego twórczość jest filarem polskiej literatury romantycznej. Jest symbolem polskiej kultury.",
+    "entities": []
+  },
+  {
+    "doc_id": 27,
+    "text": "Zamek Królewski w Warszawie mieści się przy Placu Zamkowym 4. To dawna rezydencja królów Polski. Został odbudowany po wojnie.",
+    "entities": []
+  },
+  {
+    "doc_id": 28,
+    "text": "W polu \"nazwa firmy\" możesz wpisać \"ABC Sp. z o.o.\" jako przykład. To fikcyjna nazwa używana w celach szkoleniowych. Nie jest to prawdziwa firma.",
+    "entities": []
+  },
+  {
+    "doc_id": 29,
+    "text": "Tauron Polska Energia to jeden z największych koncernów energetycznych w Polsce. Zajmuje się produkcją, dystrybucją i sprzedażą energii. Obsługuje miliony klientów.",
+    "entities": []
+  },
+  {
+    "doc_id": 30,
+    "text": "Rocznica Powstania Warszawskiego, 1 sierpnia, to dzień pamięci o bohaterach. Upamiętnia największe powstanie w historii II wojny światowej. W Warszawie co roku odbywają się uroczystości.",
+    "entities": []
+  },
+  {
+    "doc_id": 31,
+    "text": "Juliusz Słowacki, kolejny z Trzech Wieszczów, był wybitnym poetą romantycznym. Stworzył wiele dramatów i poematów. Jego \"Balladyna\" to lektura szkolna.",
+    "entities": []
+  },
+  {
+    "doc_id": 32,
+    "text": "Muzeum Narodowe w Warszawie znajduje się przy Al. Jerozolimskich 3. Posiada bogate zbiory sztuki polskiej i światowej. Jest to jedno z największych muzeów w Polsce.",
+    "entities": []
+  },
+  {
+    "doc_id": 33,
+    "text": "W dokumentach często pojawia się wzór NIP: PL1234567890. Jest to numer identyfikacji podatkowej. Pamiętaj, aby wpisać go poprawnie.",
+    "entities": []
+  },
+  {
+    "doc_id": 34,
+    "text": "PZU SA to największy ubezpieczyciel w Polsce. Oferuje szeroki zakres ubezpieczeń dla osób prywatnych i firm. Ma długą historię i ugruntowaną pozycję na rynku.",
+    "entities": []
+  },
+  {
+    "doc_id": 35,
+    "text": "Dzień Dziecka, obchodzony 1 czerwca, to święto wszystkich dzieci. Jest to okazja do obdarowywania prezentami i spędzania czasu z rodziną. Wiele miast organizuje specjalne wydarzenia.",
+    "entities": []
+  },
+  {
+    "doc_id": 36,
+    "text": "Tadeusz Kościuszko, generał i bohater narodowy, dowodził insurekcją w 1794 roku. Walczył o wolność Polski i Stanów Zjednoczonych. Jest symbolem walki o niepodległość.",
+    "entities": []
+  },
+  {
+    "doc_id": 37,
+    "text": "Rynek Główny w Krakowie to jeden z największych średniowiecznych rynków w Europie. Jest sercem miasta i popularnym miejscem spotkań. Znajdują się tam Sukiennice i Kościół Mariacki.",
+    "entities": []
+  },
+  {
+    "doc_id": 38,
+    "text": "Przykładem numeru dowodu osobistego może być: ABC123456. To jest tylko format. Nigdy nie podawaj prawdziwych danych w nieznanych miejscach.",
+    "entities": []
+  },
+  {
+    "doc_id": 39,
+    "text": "Allegro to największa platforma e-commerce w Polsce. Miliony Polaków korzystają z niej codziennie. Oferuje szeroki asortyment produktów.",
+    "entities": []
+  },
+  {
+    "doc_id": 40,
+    "text": "Wszystkich Świętych, obchodzone 1 listopada, to dzień pamięci o zmarłych. Rodziny odwiedzają groby bliskich. Jest to czas zadumy i refleksji.",
+    "entities": []
+  },
+  {
+    "doc_id": 41,
+    "text": "Kazimierz Wielki, ostatni król z dynastii Piastów, \"zastał Polskę drewnianą, a zostawił murowaną\". Był wybitnym reformatorem i budowniczym. Założył Akademię Krakowską.",
+    "entities": []
+  },
+  {
+    "doc_id": 42,
+    "text": "Ratusz Głównego Miasta w Gdańsku mieści się przy ul. Długiej 1. Jest to piękny zabytek architektury gotycko-renesansowej. Warto go odwiedzić.",
+    "entities": []
+  },
+  {
+    "doc_id": 43,
+    "text": "W polu \"numer telefonu\" wpisz przykładowy numer: 123-456-789. Pamiętaj, że to fikcyjny numer. Służy wyłącznie do celów demonstracyjnych.",
+    "entities": []
+  },
+  {
+    "doc_id": 44,
+    "text": "CD Projekt to polski producent gier wideo, znany z serii \"Wiedźmin\" i \"Cyberpunk 2077\". Jest jedną z najbardziej rozpoznawalnych polskich firm na świecie. Ma wielu fanów.",
+    "entities": []
+  },
+  {
+    "doc_id": 45,
+    "text": "Narodowe Święto Niepodległości to najważniejsze polskie święto państwowe. Obchodzone jest 11 listopada. W tym dniu cała Polska pamięta o swojej historii.",
+    "entities": []
+  },
+  {
+    "doc_id": 46,
+    "text": "Władysław Jagiełło, założyciel dynastii Jagiellonów, był królem Polski. Pod jego panowaniem nastąpiło połączenie Polski z Litwą. Odniósł zwycięstwo pod Grunwaldem.",
+    "entities": []
+  },
+  {
+    "doc_id": 47,
+    "text": "Belweder, historyczna rezydencja w Warszawie, znajduje się przy ul. Belwederskiej 56. Służył jako siedziba wielu ważnych osobistości. Obecnie jest jedną z siedzib Prezydenta RP.",
+    "entities": []
+  },
+  {
+    "doc_id": 48,
+    "text": "Do celów testowych użyj danych: Imię Test, Nazwisko Użytkownik. Adres e-mail: test@example.com. Te dane nie są prawdziwe.",
+    "entities": []
+  },
+  {
+    "doc_id": 49,
+    "text": "Bank Pekao SA to jeden z największych i najstarszych banków w Polsce. Oferuje szeroki zakres usług bankowych dla klientów indywidualnych i biznesowych. Posiada długą tradycję.",
+    "entities": []
+  },
+  {
+    "doc_id": 50,
+    "text": "Święto Konstytucji 3 Maja to polskie święto państwowe. Upamiętnia uchwalenie pierwszej w Europie konstytucji w 1791 roku. Jest to dzień wolny od pracy.",
+    "entities": []
+  }
+]
