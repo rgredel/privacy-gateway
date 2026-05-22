@@ -44,9 +44,9 @@ Automatycznie wygenerowany raport z ewaluacji Privacy Gateway.
 | Konfiguracja | Średnia [s] | Mediana [s] | Min [s] | Max [s] | Próby |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | regex | 0.006s | 0.007s | 0.004s | 0.007s | 3 |
-| herbert | 0.225s | 0.218s | 0.197s | 0.261s | 3 |
-| ener | 0.253s | 0.236s | 0.190s | 0.332s | 3 |
-| hybrid_gemini | 5.287s | 5.139s | 3.722s | 7.001s | 3 |
+| herbert | 0.227s | 0.232s | 0.212s | 0.237s | 3 |
+| ener | 0.246s | 0.226s | 0.207s | 0.304s | 3 |
+| hybrid_gemini | 4.979s | 5.303s | 3.890s | 5.745s | 3 |
 | hybrid_bielik | N/A | N/A | N/A | N/A | 0 |
 
 ## Podsumowanie uruchomienia
