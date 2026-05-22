@@ -32,26 +32,39 @@ class PresidioService(IPrivacyEngine):
         results = self.analyzer.analyze(text=text, language="pl")
         return [text[r.start:r.end] for r in results]
 
-    def analyze_detailed(self, text: str) -> List[RecognizedEntity]:
+    def analyze_detailed(self, text: str, entities: Optional[List[str]] = None) -> List[RecognizedEntity]:
         """Performs detailed analysis including positions and scores.
         
         Args:
             text (str): Input text.
+            entities (Optional[List[str]]): List of entities to analyze.
             
         Returns:
             List[RecognizedEntity]: Detailed entity models.
         """
-        results = self.analyzer.analyze(text=text, language="pl")
-        return [
-            RecognizedEntity(
-                value=text[r.start:r.end],
-                label=r.entity_type,
-                start=r.start,
-                end=r.end,
-                score=r.score,
-                recognizer=r.recognizer if hasattr(r, 'recognizer') else "unknown"
-            ) for r in results
-        ]
+        results = self.analyzer.analyze(text=text, language="pl", entities=entities)
+        
+        recognized_entities = []
+        for r in results:
+            recognizer = "unknown"
+            if hasattr(r, 'recognition_metadata') and r.recognition_metadata and isinstance(r.recognition_metadata, dict):
+                recognizer = r.recognition_metadata.get('recognizer_name', 'unknown')
+            elif hasattr(r, 'analysis_explanation') and r.analysis_explanation:
+                recognizer = getattr(r.analysis_explanation, 'recognizer_name', 'unknown')
+            elif hasattr(r, 'recognizer') and r.recognizer:
+                recognizer = r.recognizer
+                
+            recognized_entities.append(
+                RecognizedEntity(
+                    value=text[r.start:r.end],
+                    label=r.entity_type,
+                    start=r.start,
+                    end=r.end,
+                    score=r.score,
+                    recognizer=recognizer
+                )
+            )
+        return recognized_entities
 
     def get_labeled_entities(self, text: str) -> List[PIIEntity]:
         """Returns PII entities with their labels directly from the engine.

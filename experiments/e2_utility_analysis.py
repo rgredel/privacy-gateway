@@ -4,9 +4,9 @@ e2_utility_analysis.py – Eksperyment 2: Analiza kompromisu prywatność-użyte
 Zgodnie z Rozdziałem 6.2.2 pracy magisterskiej.
 Badamy kompromis:
 1. Privacy Score: % poprawnie zamaskowanych PII (Recall).
-2. Utility Score: % zachowanych słów/danych niebędących PII (1 - False Positive Rate).
+2. Utility Score: % zachowanych słów w tekście zamaskowanym (Word Count Preservation).
 
-Wersja z poprawioną definicją użyteczności (Token-based Utility).
+Wersja z poprawioną definicją użyteczności (Token-based Word Count Preservation).
 """
 
 import csv
@@ -27,13 +27,16 @@ if sys.platform == "win32":
 
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 # ── Importy z projektu głównego ───────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.app.core.config import settings
-from src.app.infrastructure.llm.factory import get_cloud_gemini_2_5_flash
+from src.app.domain.entities import RecognizedEntity, PIIEntity
+from src.app.infrastructure.llm.factory import get_local_model, get_cloud_gemini_2_5_flash
 from src.app.infrastructure.llm.langchain_service import LangChainService
 from src.app.use_cases.detection_use_case import DetectionUseCase
 from src.app.infrastructure.services.presidio_factory import setup_presidio_analyzer
@@ -45,6 +48,8 @@ RESULTS_DIR = PROJECT_ROOT / "experiments" / "results"
 RESULTS_E2_CSV = RESULTS_DIR / "results_e2_comparison.csv"
 CHECKPOINT_E2 = RESULTS_DIR / "checkpoint_e2.json"
 
+BIELIK_LOCAL = "qooba/bielik-1.5b-v3.0-instruct:Q8_0"
+
 # ══════════════════════════════════════════════════════════════════════════════
 # 1. Narzędzia analityczne
 # ══════════════════════════════════════════════════════════════════════════════
@@ -53,65 +58,73 @@ def tokenize(text: str) -> List[str]:
     """Prosta tokenizacja na słowa i liczby."""
     return re.findall(r'\b\w+\b', text)
 
-def get_metrics_v2(detected_pii: List[str], gt_entities: List[Dict], text: str) -> Dict[str, float]:
-    """Oblicza Privacy Score (Recall) i Utility Score (1 - FP rate)."""
-    
-    # --- Privacy Score (Recall) ---
-    gt_texts = [e["text"].strip().lower() for e in gt_entities]
-    if not gt_texts:
-        privacy_score = 1.0
-    else:
-        tp = 0
-        matched_gt = set()
-        for d in detected_pii:
-            d_norm = d.strip().lower()
-            for i, gt_t in enumerate(gt_texts):
-                if i not in matched_gt and (d_norm == gt_t or d_norm in gt_t or gt_t in d_norm):
-                    tp += 1
-                    matched_gt.add(i)
-                    break
-        privacy_score = tp / len(gt_texts)
-
-    # --- Utility Score (Preservation of Non-PII) ---
-    # Definicja: Utility = 1 - (Liczba False Positives / Liczba wszystkich słów nie-PII)
-    
-    # Znajdź wszystkie słowa w tekście
-    all_tokens = tokenize(text)
-    if not all_tokens: return {"privacy": privacy_score, "utility": 1.0}
-    
-    # Zidentyfikuj które słowa są częścią PII w Ground Truth
-    pii_words_gt = set()
-    for gt in gt_entities:
-        for word in tokenize(gt["text"]):
-            pii_words_gt.add(word.lower())
-            
-    # Policz słowa które NIE są PII (nasza baza użyteczności)
-    non_pii_tokens = [t for t in all_tokens if t.lower() not in pii_words_gt]
-    if not non_pii_tokens:
-        utility_score = 1.0 # Brak danych nie-PII do stracenia
-    else:
-        # Policz False Positives (to co wykryliśmy, a nie jest w GT)
-        fp_count = 0
-        for d in detected_pii:
-            is_fp = True
-            d_norm = d.strip().lower()
-            for gt_t in gt_texts:
-                if d_norm == gt_t or d_norm in gt_t or gt_t in d_norm:
-                    is_fp = False
-                    break
-            if is_fp:
-                # Każde słowo w FP liczymy jako stratę użyteczności
-                fp_count += len(tokenize(d))
-        
-        # Utility = 1 - (FP / Liczba nie-PII)
-        # Ograniczamy do [0, 1]
-        loss = fp_count / len(all_tokens) # Relatywna strata w stosunku do całego tekstu
-        utility_score = max(0.0, 1.0 - loss)
-
-    return {
-        "privacy": privacy_score,
-        "utility": utility_score
+def strip_polish_diacritics(s: str) -> str:
+    if not isinstance(s, str):
+        return ""
+    diacritics_map = {
+        'ą': 'a', 'ć': 'c', 'ę': 'e', 'ł': 'l', 'ń': 'n', 'ó': 'o', 'ś': 's', 'ź': 'z', 'ż': 'z',
+        'Ą': 'a', 'Ć': 'c', 'Ę': 'e', 'Ł': 'l', 'Ń': 'n', 'Ó': 'o', 'Ś': 's', 'Ź': 'z', 'Ż': 'z'
     }
+    for char, replacement in diacritics_map.items():
+        s = s.replace(char, replacement)
+    return s
+
+def normalize(s: str) -> str:
+    if not isinstance(s, str): return ""
+    return strip_polish_diacritics(s.strip().lower())
+
+def pii_matches(detected: str, truth: str) -> bool:
+    d = normalize(detected)
+    t = normalize(truth)
+    if not d or not t: return False
+    return d == t or d in t or t in d
+
+def calculate_privacy_score(detected_pii_vals: List[str], gt_entities: List[Dict]) -> float:
+    gt_texts = [e["text"] for e in gt_entities]
+    if not gt_texts:
+        return 1.0
+    
+    tp = 0
+    matched_gt = set()
+    for d in detected_pii_vals:
+        for i, gt_t in enumerate(gt_texts):
+            if i not in matched_gt and pii_matches(d, gt_t):
+                tp += 1
+                matched_gt.add(i)
+                break
+    return tp / len(gt_texts)
+
+def calculate_utility_score(text: str, pii_entities: List[PIIEntity], privacy_engine: PresidioService) -> float:
+    tokens_original = tokenize(text)
+    if not tokens_original:
+        return 1.0
+    
+    masked_text, _ = privacy_engine.mask_text(text, pii_entities)
+    tokens_masked = tokenize(masked_text)
+    
+    return len(tokens_masked) / len(tokens_original)
+
+async def run_hybrid_pii(
+    detection_uc: Optional[DetectionUseCase], 
+    llm_service: LangChainService, 
+    model: Any, 
+    detailed: List[RecognizedEntity], 
+    text: str
+) -> List[PIIEntity]:
+    if not detection_uc:
+        return []
+    # Wywołanie potoku hybrydowego
+    verified_pii, _ = await detection_uc.execute(text, mode="hybrid")
+    val_to_label = {ent.value: ent.label for ent in detailed}
+    
+    hy_entities = []
+    for val in verified_pii:
+        label = val_to_label.get(val)
+        if not label:
+            labeled_entities = await llm_service.label_pii([val], model_name=model.model)
+            label = labeled_entities[0].label if labeled_entities else "UNKNOWN"
+        hy_entities.append(PIIEntity(value=val, label=label))
+    return hy_entities
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 2. Checkpointy
@@ -135,10 +148,13 @@ async def main():
     parser = argparse.ArgumentParser(description="Eksperyment E2 – Privacy vs Utility")
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--skip-bielik", action="store_true", help="Pomiń lokalny model Bielik")
     args = parser.parse_args()
 
-    # Inicjalizacja
-    configs = ["RegEx only", "HerBERT only", "Hybrid (Gemini)"]
+    configs = ["RegEx only", "HerBERT only", "HerBERT + RegEx", "Hybrid (Bielik 1.5)", "Hybrid (Gemini 2.5)"]
+    if args.skip_bielik:
+        configs.remove("Hybrid (Bielik 1.5)")
+
     metrics = {c: {"privacy_sum": 0.0, "utility_sum": 0.0, "count": 0} for c in configs}
     start_from = 0
 
@@ -147,72 +163,204 @@ async def main():
         if cp:
             start_from = cp["last_index"] + 1
             metrics = cp["results_data"]
+            # Mapowanie starej nazwy na nową
+            if "Hybrid (Gemini)" in metrics:
+                metrics["Hybrid (Gemini 2.5)"] = metrics.pop("Hybrid (Gemini)")
+            
+            # Usunięcie Bielika ze słownika jeśli przekazano flagę --skip-bielik
+            if args.skip_bielik and "Hybrid (Bielik 1.5)" in metrics:
+                metrics.pop("Hybrid (Bielik 1.5)", None)
+                
             print(f"[E2] Wznawianie od {start_from}...")
     elif CHECKPOINT_E2.exists():
         CHECKPOINT_E2.unlink()
 
-    # Ładowanie danych
     with open(CORPUS_PATH, encoding="utf-8") as f:
         corpus = json.load(f)
     if args.limit: corpus = corpus[:args.limit]
 
-    # Komponenty
     analyzer = setup_presidio_analyzer()
     privacy_engine = PresidioService(analyzer)
     
-    model_gemini = get_cloud_gemini_2_5_flash()
-    llm_service = LangChainService(local_llm=model_gemini, cloud_llm=model_gemini)
-    detection_uc = DetectionUseCase(llm_service=llm_service, privacy_engine=privacy_engine)
+    # Inicjalizacja modeli LLM
+    detection_uc_local = None
+    llm_service_local = None
+    model_local = None
+    if "Hybrid (Bielik 1.5)" in configs:
+        try:
+            print("[E2] Inicjalizacja Bielik 1.5...")
+            model_local = get_local_model(model_name=BIELIK_LOCAL)
+            llm_service_local = LangChainService(local_llm=model_local, cloud_llm=model_local)
+            detection_uc_local = DetectionUseCase(llm_service=llm_service_local, privacy_engine=privacy_engine)
+            print(f"     ✔ Bielik 1.5 (Local) gotowy.")
+        except Exception as e:
+            print(f"     ✘ Błąd Bielik Local: {e}")
+            detection_uc_local = None
+
+    detection_uc_cloud = None
+    llm_service_cloud = None
+    model_cloud = None
+    try:
+        print("[E2] Inicjalizacja Gemini 2.5...")
+        model_cloud = get_cloud_gemini_2_5_flash()
+        llm_service_cloud = LangChainService(local_llm=model_cloud, cloud_llm=model_cloud)
+        detection_uc_cloud = DetectionUseCase(llm_service=llm_service_cloud, privacy_engine=privacy_engine)
+        print(f"     ✔ Gemini 2.5 Flash (Cloud) gotowy.")
+    except Exception as e:
+        print(f"     ✘ Błąd Gemini: {e}")
+        detection_uc_cloud = None
+
+    # Zapewnienie istnienia kluczy w słowniku metrics
+    for name in configs:
+        if name not in metrics:
+            metrics[name] = {"privacy_sum": 0.0, "utility_sum": 0.0, "count": 0}
+
+    # Dynamiczny backfill brakujących danych w punkcie kontrolnym
+    missing_configs = [cfg for cfg in configs if metrics[cfg]["count"] < start_from]
+    if missing_configs and start_from > 0:
+        print(f"[E2] Wykryto brakujące dane dla konfiguracji: {missing_configs}")
+        print(f"[E2] Rozpoczynam uzupełnianie danych (backfill) dla dokumentów 0 do {start_from - 1}...")
+        
+        for j in range(start_from):
+            doc = corpus[j]
+            text = doc["text"]
+            gt = doc.get("entities", [])
+            
+            detailed = privacy_engine.analyze_detailed(text)
+            nlp_recognizers = ["TransformersRecognizer", "CustomSpacyRecognizer", "SpacyRecognizer"]
+            
+            for config_name in missing_configs:
+                entities = []
+                if config_name == "RegEx only":
+                    entities = [PIIEntity(value=e.value, label=e.label) for e in detailed if e.recognizer not in nlp_recognizers]
+                elif config_name == "HerBERT only":
+                    entities = [PIIEntity(value=e.value, label=e.label) for e in detailed if e.recognizer == "TransformersRecognizer"]
+                elif config_name == "HerBERT + RegEx":
+                    entities = [PIIEntity(value=e.value, label=e.label) for e in detailed]
+                elif config_name == "Hybrid (Bielik 1.5)":
+                    if detection_uc_local:
+                        max_retries = 3
+                        failed_bielik = False
+                        for attempt in range(max_retries):
+                            try:
+                                entities = await asyncio.wait_for(
+                                    run_hybrid_pii(detection_uc_local, llm_service_local, model_local, detailed, text),
+                                    timeout=45.0
+                                )
+                                failed_bielik = False
+                                break
+                            except (asyncio.TimeoutError, Exception) as e:
+                                if attempt < max_retries - 1:
+                                    print(f"     [!] Problem z Bielik 1.5 w backfillu (Próba {attempt+1}/{max_retries}). Retry za 10s...")
+                                    await asyncio.sleep(10.0)
+                                else:
+                                    print(f"     [!] Bielik 1.5 zawiódł w backfillu na dokumencie {doc['doc_id']}. Puste encje.")
+                                    failed_bielik = True
+                        if failed_bielik:
+                            entities = []
+                elif config_name == "Hybrid (Gemini 2.5)":
+                    if detection_uc_cloud:
+                        try:
+                            entities = await run_hybrid_pii(detection_uc_cloud, llm_service_cloud, model_cloud, detailed, text)
+                        except Exception as e:
+                            print(f"     [!] Błąd Gemini 2.5 w backfillu na dokumencie {doc['doc_id']}: {e}. Puste encje.")
+                            entities = []
+                
+                privacy_score = calculate_privacy_score([e.value for e in entities], gt)
+                utility_score = calculate_utility_score(text, entities, privacy_engine)
+                
+                metrics[config_name]["privacy_sum"] += privacy_score
+                metrics[config_name]["utility_sum"] += utility_score
+                metrics[config_name]["count"] += 1
+                
+            if (j + 1) % 50 == 0:
+                print(f"  - Uzupełniono {j + 1}/{start_from} dokumentów...")
+        
+        print(f"[E2] Zakończono uzupełnianie danych (backfill).")
 
     print("=" * 95)
-    print("🔬 EKSPERYMENT E2 – Privacy vs Utility (Token-Based Analysis)")
+    print("🔬 EKSPERYMENT E2 – Privacy vs Utility (Word Count Preservation)")
     print("=" * 95)
 
-    # Przetwarzanie
     for i in range(start_from, len(corpus)):
         doc = corpus[i]
+        doc_id = doc["doc_id"]
         text = doc["text"]
         gt = doc.get("entities", [])
         
-        print(f"[{i+1}/{len(corpus)}] Doc {doc['doc_id']}...")
+        print(f"[{i+1}/{len(corpus)}] Doc {doc_id}...")
 
-        # Wykrywanie
+        # Detekcja szczegółowa z Presidio
         detailed = privacy_engine.analyze_detailed(text)
+        nlp_recognizers = ["TransformersRecognizer", "CustomSpacyRecognizer", "SpacyRecognizer"]
         
-        # Rozdzielamy po etykietach (Labels) - to jest najpewniejsza metoda
-        ner_labels = ["PERSON", "LOCATION", "ORGANIZATION"]
+        detected_variants = {}
         
-        # 1. RegEx only: Wszystko co NIE jest z modelu NER
-        re_pii = [e.value for e in detailed if e.label not in ner_labels]
+        # 1. RegEx only
+        if "RegEx only" in configs:
+            detected_variants["RegEx only"] = [PIIEntity(value=e.value, label=e.label) for e in detailed if e.recognizer not in nlp_recognizers]
         
-        # 2. HerBERT only: Tylko etykiety NER
-        hr_pii = [e.value for e in detailed if e.label in ner_labels]
-        
-        # 3. Hybrid (Gemini)
-        try:
-            hy_pii, _ = await detection_uc.execute(text, mode="hybrid")
-        except Exception as e:
-            print(f"     [!] Błąd Gemini: {e}. Pomijam dokument.")
-            continue
+        # 2. HerBERT only
+        if "HerBERT only" in configs:
+            detected_variants["HerBERT only"] = [PIIEntity(value=e.value, label=e.label) for e in detailed if e.recognizer == "TransformersRecognizer"]
+            
+        # 3. HerBERT + RegEx
+        if "HerBERT + RegEx" in configs:
+            detected_variants["HerBERT + RegEx"] = [PIIEntity(value=e.value, label=e.label) for e in detailed]
+            
+        # 4. Hybrid (Bielik 1.5)
+        if "Hybrid (Bielik 1.5)" in configs:
+            if detection_uc_local:
+                max_retries = 3
+                failed_bielik = False
+                for attempt in range(max_retries):
+                    try:
+                        detected_variants["Hybrid (Bielik 1.5)"] = await asyncio.wait_for(
+                            run_hybrid_pii(detection_uc_local, llm_service_local, model_local, detailed, text),
+                            timeout=45.0
+                        )
+                        failed_bielik = False
+                        break
+                    except (asyncio.TimeoutError, Exception) as e:
+                        if attempt < max_retries - 1:
+                            print(f"     [!] Problem z Bielik 1.5 (Próba {attempt+1}/{max_retries}). Retry za 10s...")
+                            await asyncio.sleep(10.0)
+                        else:
+                            print(f"     [!] Bielik 1.5 zawiódł na dokumencie {doc_id}. POMIJAM DOKUMENT.")
+                            failed_bielik = True
+                if failed_bielik:
+                    continue
+            else:
+                detected_variants["Hybrid (Bielik 1.5)"] = []
 
-        variants = {
-            "RegEx only": re_pii,
-            "HerBERT only": hr_pii,
-            "Hybrid (Gemini)": hy_pii
-        }
+        # 5. Hybrid (Gemini 2.5)
+        if "Hybrid (Gemini 2.5)" in configs:
+            if detection_uc_cloud:
+                try:
+                    detected_variants["Hybrid (Gemini 2.5)"] = await run_hybrid_pii(detection_uc_cloud, llm_service_cloud, model_cloud, detailed, text)
+                except Exception as e:
+                    print(f"     [!] Błąd Gemini na dokumencie {doc_id}: {e}. POMIJAM DOKUMENT.")
+                    continue
+            else:
+                detected_variants["Hybrid (Gemini 2.5)"] = []
 
-        for name, pii_found in variants.items():
-            m = get_metrics_v2(pii_found, gt, text)
-            metrics[name]["privacy_sum"] += m["privacy"]
-            metrics[name]["utility_sum"] += m["utility"]
+        # Aktualizacja metryk
+        for name in configs:
+            entities = detected_variants.get(name, [])
+            pii_vals = [e.value for e in entities]
+            privacy_score = calculate_privacy_score(pii_vals, gt)
+            utility_score = calculate_utility_score(text, entities, privacy_engine)
+            
+            metrics[name]["privacy_sum"] += privacy_score
+            metrics[name]["utility_sum"] += utility_score
             metrics[name]["count"] += 1
 
         if (i + 1) % 50 == 0:
             save_checkpoint(i, metrics)
 
-    # Raport
+    # Raportowanie
     print("\n" + "-" * 95)
-    print(f"{'Konfiguracja':<20} | {'Privacy (Recall)':<20} | {'Utility (Preservation)':<20}")
+    print(f"{'Konfiguracja':<25} | {'Privacy (Recall)':<20} | {'Utility (Word Count Preservation)':<35}")
     print("-" * 95)
 
     csv_rows = []
@@ -220,7 +368,7 @@ async def main():
         count = metrics[name]["count"]
         avg_p = metrics[name]["privacy_sum"] / count if count > 0 else 0
         avg_u = metrics[name]["utility_sum"] / count if count > 0 else 0
-        print(f"{name:<20} | {avg_p:.4f}              | {avg_u:.4f}")
+        print(f"{name:<25} | {avg_p:.4f}              | {avg_u:.4f}")
         csv_rows.append({"model": name, "avg_privacy": avg_p, "avg_utility": avg_u, "doc_count": count})
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)

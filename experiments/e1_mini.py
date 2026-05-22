@@ -9,8 +9,20 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 CORPUS_PATH = PROJECT_ROOT / "experiments" / "corpus" / "corpus.json"
 
+def strip_polish_diacritics(s: str) -> str:
+    if not isinstance(s, str):
+        return ""
+    diacritics_map = {
+        'ą': 'a', 'ć': 'c', 'ę': 'e', 'ł': 'l', 'ń': 'n', 'ó': 'o', 'ś': 's', 'ź': 'z', 'ż': 'z',
+        'Ą': 'a', 'Ć': 'c', 'Ę': 'e', 'Ł': 'l', 'Ń': 'n', 'Ó': 'o', 'Ś': 's', 'Ź': 'z', 'Ż': 'z'
+    }
+    for char, replacement in diacritics_map.items():
+        s = s.replace(char, replacement)
+    return s
+
 def normalize(s: str) -> str:
-    return s.strip().lower()
+    if not isinstance(s, str): return ""
+    return strip_polish_diacritics(s.strip().lower())
 
 def pii_matches(detected: str, truth: str) -> bool:
     d = normalize(detected)

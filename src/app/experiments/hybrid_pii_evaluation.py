@@ -328,7 +328,7 @@ def run_benchmark():
         ],
         "ner_model_configuration": {
             "labels_to_ignore": ["O"],
-            "aggregation_strategy": "max",
+            "aggregation_strategy": "simple",
             "stride": 16,
             "alignment_mode": "expand",
             "model_to_presidio_entity_mapping": {

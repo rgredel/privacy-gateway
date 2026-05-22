@@ -23,26 +23,51 @@ if sys.platform == "win32":
 CORPUS_FILE = PROJECT_ROOT / "experiments/corpus/fp_test_corpus.json"
 RESULTS_FILE = PROJECT_ROOT / "experiments/results/results_fp_resistance.json"
 
+BIELIK_LOCAL = "qooba/bielik-1.5b-v3.0-instruct:Q8_0"
+
 async def run_fp_test():
+    parser = argparse.ArgumentParser(description="Eksperyment 1B – Odporność na False Positives")
+    parser.add_argument("--skip-bielik", action="store_true", help="Pomiń lokalny model Bielik")
+    args = parser.parse_args()
+
     print("="*80)
-    print("START: EKSPERYMENT 1B - ODPORNOŚĆ NA FALSE POSITIVES")
+    print("START: EKSPERYMENT 1B - ODPORNOŚĆ NA FALSE POSITIVES (5 konfiguracji)")
     print("="*80)
     
     # Importy wewnatrz, zeby uniknac hangingu
     from src.app.main import bootstrap_app
     from src.app.infrastructure.services.presidio_factory import setup_presidio_analyzer
     from src.app.infrastructure.services.presidio_service import PresidioService
+    from src.app.infrastructure.llm.factory import get_local_model, get_cloud_gemini_2_5_flash
+    from src.app.infrastructure.llm.langchain_service import LangChainService
+    from src.app.use_cases.detection_use_case import DetectionUseCase
 
     print("[INIT] Bootstrapping components...")
     app_graph = bootstrap_app()
     analyzer = setup_presidio_analyzer()
     presidio_service = PresidioService(analyzer)
     
+    # Inicjalizacja Bielik
+    detection_uc_local = None
+    if not args.skip_bielik:
+        try:
+            model_local = get_local_model(model_name=BIELIK_LOCAL)
+            llm_service_local = LangChainService(local_llm=model_local, cloud_llm=model_local)
+            detection_uc_local = DetectionUseCase(llm_service=llm_service_local, privacy_engine=presidio_service)
+            print("     ✔ Bielik 1.5 gotowy.")
+        except Exception as e:
+            print(f"     ✘ Błąd inicjalizacji Bielika: {e}")
+    else:
+        print("     ⏭ Bielik pominięty (--skip-bielik)")
+    
     with open(CORPUS_FILE, "r", encoding="utf-8") as f:
         corpus = json.load(f)
     print(f"[INIT] Korpus załadowany: {len(corpus)} dokumentów.")
 
-    configurations = ["regex", "ener", "hybrid_gemini"]
+    configurations = ["regex", "herbert", "ener", "hybrid_bielik", "hybrid_gemini"]
+    if args.skip_bielik:
+        configurations.remove("hybrid_bielik")
+    
     # Tu skupiamy sie na FP (False Positives)
     # Poniewaz w korpusie 'entities' jest puste, kazde 'detected' to FP.
     results = {config: {"fp_count": 0, "total_entities_detected": 0} for config in configurations}
@@ -61,8 +86,28 @@ async def run_fp_test():
                 detailed = presidio_service.analyze_detailed(text)
                 nlp_recs = ["TransformersRecognizer", "CustomSpacyRecognizer", "SpacyRecognizer"]
                 detected = [ent.value for ent in detailed if ent.recognizer not in nlp_recs]
+            elif name == "herbert":
+                # Tylko encje z TransformersRecognizer (HerBERT NER)
+                herbert_entities = ["PERSON", "LOCATION", "ORGANIZATION"]
+                detailed_herbert = presidio_service.analyze_detailed(text, entities=herbert_entities)
+                detected = [ent.value for ent in detailed_herbert if ent.recognizer == "TransformersRecognizer"]
             elif name == "ener":
                 detected = presidio_service.get_candidates(text)
+            elif name == "hybrid_bielik":
+                if not detection_uc_local:
+                    print(f"  {name:<15} | SKIPPED (brak modelu)")
+                    doc_res[f"{name}_fp"] = "N/A"
+                    doc_res[f"{name}_detected"] = []
+                    continue
+                try:
+                    verified_pii, _ = await asyncio.wait_for(
+                        detection_uc_local.execute(text, mode="hybrid"),
+                        timeout=45.0
+                    )
+                    detected = list(verified_pii) if verified_pii else []
+                except Exception as e:
+                    print(f"  [!] Bielik Error: {e}")
+                    detected = []
             elif name == "hybrid_gemini":
                 try:
                     state = await app_graph.ainvoke({
@@ -97,3 +142,4 @@ async def run_fp_test():
 
 if __name__ == "__main__":
     asyncio.run(run_fp_test())
+

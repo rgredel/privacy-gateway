@@ -49,7 +49,9 @@ ZASADY (Zgodnie z RODO Motyw 26 i polityką minimalizacji):
 1. ZACHOWAJ (is_pii: true): Imię, nazwisko osoby prywatnej (również JDG), NIP, PESEL, adres (ulica, nr domu), nr konta, e-mail, telefon, numer faktury.
 2. ODRZUĆ (is_pii: false): Postacie historyczne, osoby powszechnie znane (np. Jan Paweł II, Mikołaj Kopernik) oraz adresy urzędów i instytucji publicznych (np. ul. Wiejska 4, Wawel).
 3. ODRZUĆ (is_pii: false): Daty (np. "20.12.2023"), kwoty transakcji (np. "150.00 zł"), nazwy towarów.
-4. ODRZUĆ (is_pii: false): Nazwy miast i państw, jeśli występują samodzielnie (nie są częścią adresu zamieszkania/siedziby).
+4. MIASTA I PAŃSTWA (is_pii: true/false):
+   - ODRZUĆ (is_pii: false), jeśli nazwa miasta lub państwa występuje w tekście samodzielnie i w kontekście ogólnym/geograficznym (np. "Gdańsk to piękne miasto", "pochodzi z Warszawy").
+   - ZACHOWAJ (is_pii: true), jeśli nazwa miasta lub państwa jest powiązana z adresem zamieszkania, siedziby, wysyłki lub kontaktu (np. występuje bezpośrednio obok kodu pocztowego, ulicy, numeru budynku, lub po słowach takich jak "Adres:", "zamieszkały w", "siedziba w", itp.). Uwzględnij literówki i błędy OCR (np. "Ostrołeka" -> ZACHOWAJ, jeśli to część adresu).
 5. ZACHOWAJ: Nawet jeśli tekst jest nieczytelny (błędy OCR), ale fragment wygląda na unikalny identyfikator.
 
 Twoim priorytetem jest wysoki Recall dla identyfikatorów bezpośrednich osób prywatnych, ale wysoka ODPORNOŚĆ na dane publiczne i historyczne.

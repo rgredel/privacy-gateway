@@ -4,7 +4,21 @@ import json
 import csv
 import numpy as np
 import sys
+import argparse
 from pathlib import Path
+
+# Wymuszenie UTF-8 na Windowsie
+try:
+    if sys.stdout.encoding != 'utf-8':
+        sys.stdout.reconfigure(encoding='utf-8')
+    if sys.stderr.encoding != 'utf-8':
+        sys.stderr.reconfigure(encoding='utf-8')
+except AttributeError:
+    import io
+    if sys.stdout.encoding != 'utf-8':
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    if sys.stderr.encoding != 'utf-8':
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 # Dodanie katalogu głównego projektu do sys.path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -23,8 +37,6 @@ from src.app.core.config import settings
 BASE_DIR = Path(__file__).parent.parent
 CORPUS_FILE = BASE_DIR / "experiments/corpus/benchmark_corpus.json"
 RESULTS_FILE = BASE_DIR / "experiments/results/results_e4_comparison.csv"
-
-from src.app.domain.entities import GraphState
 
 from src.app.domain.entities import GraphState
 from src.app.infrastructure.services.presidio_factory import setup_presidio_analyzer
@@ -58,11 +70,17 @@ def measure_presidio_latency(presidio_service, text, variant="ener"):
     """Mierzy czas wykonania samej detekcji Presidio dla różnych wariantów"""
     start = time.perf_counter()
     if variant == "regex":
-        detailed = presidio_service.analyze_detailed(text)
         nlp_recs = ["TransformersRecognizer", "CustomSpacyRecognizer", "SpacyRecognizer"]
-        _ = [ent.value for ent in detailed if ent.recognizer not in nlp_recs]
+        recognizers = [r for r in presidio_service.analyzer.registry.get_recognizers(language="pl", all_fields=True) if r.name not in nlp_recs]
+        results = []
+        for r in recognizers:
+            res = r.analyze(text, entities=r.supported_entities)
+            if res:
+                results.extend(res)
+        _ = [ent.value if hasattr(ent, 'value') else text[ent.start:ent.end] for ent in results]
     elif variant == "herbert":
-        detailed = presidio_service.analyze_detailed(text)
+        herbert_entities = ["PERSON", "LOCATION", "ORGANIZATION"]
+        detailed = presidio_service.analyze_detailed(text, entities=herbert_entities)
         herbert_labels = ["PERSON", "LOCATION", "ORGANIZATION"]
         _ = [ent.value for ent in detailed if ent.label in herbert_labels]
     else: # ener
@@ -71,6 +89,11 @@ def measure_presidio_latency(presidio_service, text, variant="ener"):
     return time.perf_counter() - start
 
 async def main():
+    parser = argparse.ArgumentParser(description="Eksperyment E4 – Latency Benchmark")
+    parser.add_argument("--limit", type=int, default=50, help="Liczba dokumentów do testowania")
+    parser.add_argument("--skip-bielik", action="store_true", help="Pomiń lokalny model Bielik")
+    args = parser.parse_args()
+
     print("="*60)
     print("START: EKSPERYMENT E4 - KOMPLEKSOWE POROWNANIE LATENCJI")
     print("="*60)
@@ -82,11 +105,12 @@ async def main():
     with open(CORPUS_FILE, "r", encoding="utf-8") as f:
         corpus = json.load(f)
 
-    # Testujemy na 5 dokumentach dla lepszej statystyki
-    test_docs = corpus[:5]
+    # Testujemy na wybranej liczbie dokumentów (domyślnie 50)
+    test_docs = corpus[:args.limit]
     results = []
     
-    configs = ["regex", "herbert", "ener", "hybrid_gemini", "hybrid_bielik"]
+    all_configs = ["regex", "herbert", "ener", "hybrid_gemini", "hybrid_bielik"]
+    configs = [cfg for cfg in all_configs if not (args.skip_bielik and cfg == "hybrid_bielik")]
 
     print(f"Testowanie na {len(test_docs)} dokumentach dla {len(configs)} konfiguracji...")
 
@@ -122,22 +146,30 @@ async def main():
         results.append(doc_res)
 
     # Statystyki i Raport
-    print("\n" + "="*80)
-    print(f"{'Konfiguracja':<20} | {'Srednia':<10} | {'Mediana':<10} | {'Min':<10} | {'Max':<10}")
-    print("-" * 80)
+    print("\n" + "="*103)
+    header = f"{'Konfiguracja':<20} | {'Srednia':<10} | {'Mediana':<10} | {'P95':<10} | {'Min':<10} | {'Max':<10} | {'Throughput':<15}"
+    print(header)
+    print("-" * 103)
     
     for cfg in configs:
         times = [r[cfg] for r in results if r[cfg] is not None]
         if times:
-            print(f"{cfg:<20} | {np.mean(times):.3f}s | {np.median(times):.3f}s | {np.min(times):.3f}s | {np.max(times):.3f}s")
+            mean_val = np.mean(times)
+            median_val = np.median(times)
+            p95_val = np.percentile(times, 95)
+            min_val = np.min(times)
+            max_val = np.max(times)
+            throughput_val = 1.0 / mean_val if mean_val > 0 else 0.0
+            print(f"{cfg:<20} | {mean_val:<10.3f} | {median_val:<10.3f} | {p95_val:<10.3f} | {min_val:<10.3f} | {max_val:<10.3f} | {throughput_val:<15.2f}")
         else:
             print(f"{cfg:<20} | N/A")
-    print("="*80)
+    print("="*103)
 
     # Zapis
     RESULTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = list(results[0].keys())
     with open(RESULTS_FILE, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=results[0].keys())
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(results)
     

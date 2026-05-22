@@ -32,16 +32,15 @@ EXPERIMENTS_DIR = PROJECT_ROOT / "experiments"
 RESULTS_DIR = EXPERIMENTS_DIR / "results"
 REPORT_PATH = EXPERIMENTS_DIR / "report_summary.md"
 
-# Format: (Nazwa, Ścieżka skryptu, Czy wspiera --limit i --resume)
+# Format: (Nazwa, Ścieżka skryptu)
 SCRIPTS = [
-    ("E1 – Detekcja PII (F1-score)", EXPERIMENTS_DIR / "e1_pii_detection.py", True),
-    ("E2 – Utility Score (Token-based)", EXPERIMENTS_DIR / "e2_utility_analysis.py", True),
-    ("E3 – Prompt Injection Red-Team", EXPERIMENTS_DIR / "e3_prompt_injection.py", False),
-    ("E4 – Latency Benchmark", EXPERIMENTS_DIR / "e4_performance_analysis.py", False),
+    ("E1, E2, E4 – Połączona ewaluacja (PII, Utility, Latency)", EXPERIMENTS_DIR / "e1_e2_e4_combined.py"),
+    ("E1b – Odporność na False Positives", EXPERIMENTS_DIR / "e1b_fp_resistance.py"),
+    ("E3 – Prompt Injection Red-Team", EXPERIMENTS_DIR / "e3_prompt_injection.py"),
 ]
 
 
-def run_script(name: str, script_path: Path, supports_args: bool, limit: int = None, resume: bool = False) -> bool:
+def run_script(name: str, script_path: Path, limit: int = None, resume: bool = False, skip_bielik: bool = False) -> bool:
     """Uruchamia skrypt Pythona z przekazanymi argumentami i zwraca True jeśli zakończył się sukcesem."""
     print(f"\n{'═' * 70}")
     print(f"  Uruchamiam: {name}")
@@ -49,15 +48,22 @@ def run_script(name: str, script_path: Path, supports_args: bool, limit: int = N
     print(f"{'═' * 70}\n")
 
     cmd = [sys.executable, "-u", str(script_path)]
-    if supports_args:
-        if limit is not None:
-            cmd.extend(["--limit", str(limit)])
-        if resume:
-            cmd.append("--resume")
+    
+    # E1, E2, E3, E4, combined support --limit
+    if limit is not None and script_path.name in ["e1_pii_detection.py", "e2_utility_analysis.py", "e3_prompt_injection.py", "e4_performance_analysis.py", "e1_e2_e4_combined.py"]:
+        cmd.extend(["--limit", str(limit)])
+        
+    # E1, E2, combined support --resume
+    if resume and script_path.name in ["e1_pii_detection.py", "e2_utility_analysis.py", "e1_e2_e4_combined.py"]:
+        cmd.append("--resume")
+        
+    # E1, E2, E4, combined, E1b support --skip-bielik
+    if skip_bielik and script_path.name in ["e1_pii_detection.py", "e2_utility_analysis.py", "e4_performance_analysis.py", "e1_e2_e4_combined.py", "e1b_fp_resistance.py"]:
+        cmd.append("--skip-bielik")
 
     try:
         # Limit 15 minut na pojedynczy skrypt w trybie limitowanym
-        timeout_val = 900 if limit is not None else 25000
+        timeout_val = 900 if limit is not None else 36000
         result = subprocess.run(
             cmd,
             cwd=str(PROJECT_ROOT),
@@ -236,6 +242,7 @@ def main():
     parser = argparse.ArgumentParser(description="Orkiestrator eksperymentów badawczych")
     parser.add_argument("--limit", type=int, default=None, help="Limit dokumentów przetwarzanych w E1 i E2 (ochrona przed długim runem)")
     parser.add_argument("--resume", action="store_true", help="Wznawiaj eksperymenty E1/E2 z zapisanych checkpointów")
+    parser.add_argument("--skip-bielik", action="store_true", help="Pomiń model Bielik w skryptach E1, E2 i E4")
     args = parser.parse_args()
 
     print("╔══════════════════════════════════════════════════════════════════════╗")
@@ -249,8 +256,8 @@ def main():
 
     statuses = {}
 
-    for name, script, supports_args in SCRIPTS:
-        ok = run_script(name, script, supports_args, limit=args.limit, resume=args.resume)
+    for name, script in SCRIPTS:
+        ok = run_script(name, script, limit=args.limit, resume=args.resume, skip_bielik=args.skip_bielik)
         statuses[name] = ok
 
     print("\n\n" + "=" * 70)
