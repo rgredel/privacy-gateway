@@ -31,28 +31,28 @@ class DetectionUseCase:
         """
         from src.app.core.config import settings
         m_name = model_name or settings.local_model_default
-        logs = [f"Detection started in '{mode}' mode using model '{m_name}'."]
+        logs = [f"Rozpoczęto detekcję w trybie '{mode}' przy użyciu modelu '{m_name}'."]
         
         if mode == "llm-only":
             pii = await self.llm_service.analyze_pii(text, model_name=m_name)
-            logs.append(f"LLM-only: Detected {len(pii)} items.")
+            logs.append(f"Tylko LLM: Wykryto {len(pii)} elementów.")
             return pii, logs
             
-        # For hybrid and ner-only, we start with NER
+        # Dla trybów hybrydowego i tylko-NER zaczynamy od NER
         detailed_entities = self.privacy_engine.analyze_detailed(text)
-        logs.append(f"NER: Found {len(detailed_entities)} raw candidates.")
+        logs.append(f"NER: Znaleziono {len(detailed_entities)} surowych kandydatów.")
         
         if mode == "ner-only":
             pii = list(set([ent.value for ent in detailed_entities]))
             return pii, logs
             
-        # In hybrid mode, we want the LLM to judge everything to ensure highest precision
-        # and resistance to False Positives (like historical figures or public data).
+        # W trybie hybrydowym chcemy, aby sędzia LLM ocenił wszystko w celu zapewnienia najwyższej precyzji
+        # i odporności na fałszywe wykrycia (False Positives).
         high_conf = []
         to_adjudicate = detailed_entities
         
         verified_pii = []
-        logs.append(f"Adjudicating all {len(detailed_entities)} candidates via LLM judge.")
+        logs.append(f"Rozstrzyganie wszystkich {len(detailed_entities)} kandydatów przez sędziego LLM.")
         
         if to_adjudicate:
             llm_verified, reasonings = await self.llm_service.adjudicate_entities(
@@ -63,9 +63,9 @@ class DetectionUseCase:
             verified_pii.extend(llm_verified)
             
             for val, reason in reasonings.items():
-                status = "✅ APPROVED" if val in llm_verified else "❌ REJECTED"
-                logs.append(f"Judge: {val} -> {status} ({reason})")
+                status = "✅ ZATWIERDZONO" if val in llm_verified else "❌ ODRZUCONO"
+                logs.append(f"Sędzia: {val} -> {status} ({reason})")
         else:
-            logs.append("No low-confidence items to adjudicate.")
+            logs.append("Brak elementów do rozstrzygnięcia.")
             
         return list(set(verified_pii)), logs

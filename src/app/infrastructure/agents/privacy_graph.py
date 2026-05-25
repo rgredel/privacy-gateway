@@ -55,7 +55,7 @@ def create_privacy_graph(
         if state.detection_mode == "ner-only":
             new_labeled_entities = privacy_engine.get_labeled_entities(text)
             pii_strings = [e.value for e in new_labeled_entities]
-            detection_logs = [f"NER-only mode: Found {len(pii_strings)} entities locally."]
+            detection_logs = [f"Tryb tylko NER: Znaleziono {len(pii_strings)} jednostek lokalnie."]
         else:
             # 1a. Get detailed entities from NER engine first (to keep labels)
             detailed_ner_entities = privacy_engine.analyze_detailed(text)
@@ -159,7 +159,7 @@ def create_privacy_graph(
         Returns:
             Dict[str, Any]: Blocking message.
         """
-        return {"final_output": "🛑 SECURITY ERROR: Request blocked by Guardrail Agent."}
+        return {"final_output": "🛑 BŁĄD BEZPIECZEŃSTWA (SECURITY ERROR): Zapytanie zablokowane przez agenta Guardrail."}
 
     async def re_identification_node(state: GraphState) -> Dict[str, Any]:
         """Node for restoring original PII values in the final response.

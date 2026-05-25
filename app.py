@@ -120,7 +120,7 @@ async def on_message(message: cl.Message):
     
     config = {"configurable": {"thread_id": thread_id}}
     
-    msg = cl.Message(content="🔄 Verifying Guardrails and masking PII...", author="Privacy Gateway")
+    msg = cl.Message(content="🔄 Weryfikacja zabezpieczeń i maskowanie PII...", author="Privacy Gateway")
     await msg.send()
     
     # 3. Invoke the Privacy Graph
@@ -133,39 +133,41 @@ async def on_message(message: cl.Message):
         else:
             final_state = final_state_dict
         
-        final_output = final_state.final_output or "⚠️ Warning: The model returned an empty response."
+        final_output = final_state.final_output or "⚠️ Ostrzeżenie: Model zwrócił pustą odpowiedź."
         
-        # 4. Build debug interface
+        # 4. Budowanie interfejsu diagnostycznego (Debug)
         debug_info = ""
         if settings.get("show_debug"):
-            debug_info += "\n\n---\n**⚙️ System Logs (Debug):**\n"
+            debug_info += "\n\n---\n**⚙️ Logi systemowe (Debug):**\n"
             
-            detected_pii_str = ", ".join(final_state.raw_pii_strings) if final_state.raw_pii_strings else "(No PII detected)"
-            debug_info += f"- **PII Vault:** `{detected_pii_str}`\n"
-            debug_info += f"- **Masked Query:**\n> `{final_state.masked_query}`\n"
-            
-            if final_state.masked_context:
-                debug_info += f"- **Masked Context (Files):**\n```\n{final_state.masked_context}\n```\n"
+            # Logowanie PII w postaci klucz = wartość
+            if final_state.vault:
+                debug_info += "- **Skarbiec PII (Vault):**\n"
+                for token, original in final_state.vault.items():
+                    key_name = token.strip("[]")
+                    debug_info += f"  - `{key_name} = {original}`\n"
+            else:
+                debug_info += "- **Skarbiec PII (Vault):** `Brak wykrytych danych PII`\n"
 
-            # Show detection pipeline steps
+            # Pokaż kroki potoku detekcji
             if final_state.detection_debug:
-                debug_info += "\n**🔍 Detection Pipeline Details:**\n"
+                debug_info += "\n**🔍 Szczegóły procesu detekcji PII:**\n"
                 for log in final_state.detection_debug:
                     debug_info += f"- {log}\n"
 
-            # Show cloud LLM prompt details
-            cloud_debug = final_state.cloud_query_debug or "No data available"
-            debug_info += f"\n**☁️ Cloud LLM View ({final_state.cloud_model}):**\n```\n{cloud_debug}\n```"
+            # Pokaż szczegóły promptu chmurowego LLM
+            cloud_debug = final_state.cloud_query_debug or "Brak dostępnych danych"
+            debug_info += f"\n**☁️ Widok Cloud LLM ({final_state.cloud_model}):**\n```\n{cloud_debug}\n```"
             
-            # PII Leak Warnings
+            # Ostrzeżenia o wycieku PII
             privacy_warnings = final_state.privacy_warnings
             if privacy_warnings:
-                debug_info += "\n**🛑 Data Leakage Warnings (Anti-Leakage):**\n"
+                debug_info += "\n**🛑 Ostrzeżenia o wycieku danych (Anti-Leakage):**\n"
                 for warn in privacy_warnings:
                     debug_info += f"- {warn}\n"
             
             if final_state.is_safe is False:
-                debug_info += "\n**🛑 BLOCKED:** Prompt Injection attack intercepted by Guardrail Agent."
+                debug_info += "\n**🛑 ZABLOKOWANO:** Atak Prompt Injection przechwycony przez agenta Guardrail."
             
         msg.content = final_output + debug_info
         await msg.update()
@@ -174,5 +176,5 @@ async def on_message(message: cl.Message):
         print(f"[ERROR: APP] {e}")
         import traceback
         traceback.print_exc()
-        msg.content = f"❌ **Error during processing:** {str(e)}"
+        msg.content = f"❌ **Błąd podczas przetwarzania:** {str(e)}"
         await msg.update()
